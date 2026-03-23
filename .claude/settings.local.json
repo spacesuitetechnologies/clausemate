@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/sharan/Desktop/clausemate -type d -not -path */node_modules/* -not -path */.git/*)",
+      "Bash(find /Users/sharan/Desktop/clausemate -name *.env* -o -name .env.example)",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\(''''scripts'''', {}\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(npm audit:*)",
+      "Bash(node -e \":*)",
+      "Bash(npm ls:*)",
+      "Bash(timeout 8 npx tsx src/index.ts)",
+      "Bash(STORAGE_TYPE=s3 npx tsx src/services/storage.ts)",
+      "Bash(DATABASE_URL=postgres://x JWT_SECRET=x npx tsx -e \":*)",
+      "Bash(npx tsx:*)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $f ===\")",
+      "Read(//Users/sharan/Desktop/clausemate/clausemate-backend/**)",
+      "Bash(done)",
+      "Bash(node:*)",
+      "Bash(xargs ls:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
+    ]
+  }
+}
