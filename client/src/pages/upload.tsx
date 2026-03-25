@@ -15,6 +15,10 @@ import {
   RefreshCw,
   Clock,
   Loader2,
+  FileWarning,
+  ShieldAlert,
+  ListChecks,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -26,11 +30,13 @@ import { useAnalysisPolling } from "@/hooks/use-analysis-polling";
 import { useToast } from "@/hooks/use-toast";
 import { demoSteps } from "@/lib/mock-data";
 import * as api from "@/lib/api";
+import { handleUpload } from "@/lib/upload";
 import type { AnalysisCost } from "@/lib/credits";
+import type { ClauseResult } from "@/types/analysis";
 
-// ── File validation ───────────────────────────────────────────────────────────
+// ── File validation ────────────────────────────────────────────────────────────
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function validateFile(f: File): string | null {
   const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
@@ -38,17 +44,318 @@ function validateFile(f: File): string | null {
     return "Only PDF, DOCX, or TXT files are supported.";
   }
   if (f.size > MAX_FILE_SIZE) {
-    return `File too large. Max size is 10MB (got ${(f.size / (1024 * 1024)).toFixed(1)} MB).`;
+    return `File too large. Max size is 10 MB (got ${(f.size / 1024 / 1024).toFixed(1)} MB).`;
   }
   return null;
 }
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function fileExt(name: string): string {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+// ── Contract viewer (right panel) ─────────────────────────────────────────────
+
+function ContractViewer({
+  previewUrl,
+  filename,
+}: {
+  previewUrl: string | null;
+  filename: string | null;
+}) {
+  if (!previewUrl || !filename) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 select-none">
+        <div className="h-16 w-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+          <FileText className="h-8 w-8 text-muted-foreground/30" />
+        </div>
+        <div className="text-center">
+          <p className="text-[13px] font-medium text-muted-foreground">No contract loaded</p>
+          <p className="text-[12px] text-muted-foreground/60 mt-1">
+            Upload a contract to preview it here
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const ext = fileExt(filename);
+  const canPreview = ext === "pdf" || ext === "txt";
+
+  if (!canPreview) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 select-none px-8 text-center">
+        <div className="h-16 w-16 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+          <FileWarning className="h-8 w-8 text-amber-400" />
+        </div>
+        <div>
+          <p className="text-[13px] font-medium">{filename}</p>
+          <p className="text-[12px] text-muted-foreground mt-1.5">
+            .{ext.toUpperCase()} files cannot be previewed in the browser.
+            <br />
+            The file has been uploaded and will be analyzed.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={previewUrl}
+      title={filename}
+      className="w-full h-full border-0"
+      style={{ background: "white" }}
+    />
+  );
+}
+
+// ── Section skeleton ────────────────────────────────────────────────────────────
+
+function SkeletonLines({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-2 animate-pulse">
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="h-3 rounded-full bg-muted"
+          style={{ width: `${70 + (i % 3) * 10}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Analysis sections (left panel bottom) ──────────────────────────────────────
+
+type AnalysisPhase = "upload" | "analyzing" | "results";
+
+function AnalysisSections({
+  phase,
+  clauses,
+  overallScore,
+  analysisCost,
+  expandedClause,
+  setExpandedClause,
+  canRedline,
+}: {
+  phase: AnalysisPhase;
+  clauses: ClauseResult[];
+  overallScore: number;
+  analysisCost: AnalysisCost | null;
+  expandedClause: string | null;
+  setExpandedClause: (id: string | null) => void;
+  canRedline: boolean;
+}) {
+  const highRisk = clauses.filter((c) => c.risk_level === "HIGH");
+  const medRisk = clauses.filter((c) => c.risk_level === "MEDIUM");
+
+  const sectionBase =
+    "rounded-xl border border-border/60 bg-white overflow-hidden";
+
+  if (phase === "upload") {
+    return (
+      <div className="space-y-3">
+        {[
+          { icon: BarChart3, label: "Summary" },
+          { icon: ShieldAlert, label: "Risks" },
+          { icon: ListChecks, label: "Key Clauses" },
+        ].map(({ icon: Icon, label }) => (
+          <div key={label} className={`${sectionBase} p-4`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon className="h-4 w-4 text-muted-foreground/40" />
+              <span className="text-[12px] font-semibold text-muted-foreground/50 uppercase tracking-wide">
+                {label}
+              </span>
+            </div>
+            <p className="text-[12px] text-muted-foreground/50">
+              Upload a contract to see {label.toLowerCase()}.
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (phase === "analyzing") {
+    return (
+      <div className="space-y-3">
+        {[
+          { icon: BarChart3, label: "Summary" },
+          { icon: ShieldAlert, label: "Risks" },
+          { icon: ListChecks, label: "Key Clauses" },
+        ].map(({ icon: Icon, label, lines }: { icon: typeof BarChart3; label: string; lines?: number }) => (
+          <div key={label} className={`${sectionBase} p-4`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon className="h-4 w-4 text-muted-foreground/60" />
+              <span className="text-[12px] font-semibold text-muted-foreground/60 uppercase tracking-wide">
+                {label}
+              </span>
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/40 ml-auto" />
+            </div>
+            <SkeletonLines count={lines ?? 3} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // phase === "results"
+  return (
+    <div className="space-y-3">
+      {/* Summary */}
+      <div className={`${sectionBase} p-4 space-y-3`}>
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-primary/70" />
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">
+            Summary
+          </span>
+        </div>
+        <RiskBar score={overallScore} />
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          {[
+            { label: "High Risk", value: highRisk.length, color: "text-red-600" },
+            { label: "Medium", value: medRisk.length, color: "text-amber-500" },
+            { label: "Total", value: clauses.length, color: "text-muted-foreground" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+              <p className={`text-base font-bold ${color}`}>{value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+        {analysisCost && (
+          <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+            {analysisCost.actual_credits} credits used
+          </p>
+        )}
+      </div>
+
+      {/* Risks */}
+      <div className={`${sectionBase} p-4`}>
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldAlert className="h-4 w-4 text-primary/70" />
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">
+            Risks
+          </span>
+        </div>
+        {[...highRisk, ...medRisk].length === 0 ? (
+          <p className="text-[12px] text-muted-foreground">No significant risks found.</p>
+        ) : (
+          <div className="space-y-2">
+            {[...highRisk, ...medRisk].slice(0, 4).map((clause) => (
+              <div
+                key={clause.id}
+                className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/30 border border-border/40"
+              >
+                <span
+                  className={`mt-0.5 h-4 w-4 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                    clause.risk_level === "HIGH"
+                      ? "bg-red-100 text-red-600"
+                      : "bg-amber-100 text-amber-600"
+                  }`}
+                >
+                  !
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-medium leading-tight truncate">{clause.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                    {clause.explanation}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Key Clauses */}
+      <div className={sectionBase}>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
+          <ListChecks className="h-4 w-4 text-primary/70" />
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">
+            Key Clauses
+          </span>
+          <span className="ml-auto text-[11px] text-muted-foreground">{clauses.length} found</span>
+        </div>
+        <div className="divide-y divide-border/30">
+          {clauses.map((clause, i) => {
+            const isExpanded = expandedClause === clause.id;
+            const isLocked = !canRedline && i >= 2;
+            return (
+              <div key={clause.id}>
+                <button
+                  onClick={() => !isLocked && setExpandedClause(isExpanded ? null : clause.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+                >
+                  <span
+                    className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${
+                      clause.risk_level === "HIGH"
+                        ? "bg-red-50 text-red-600"
+                        : clause.risk_level === "MEDIUM"
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-green-50 text-green-600"
+                    }`}
+                  >
+                    {clause.risk_level}
+                  </span>
+                  <span className="text-[12px] font-medium flex-1 truncate">{clause.title}</span>
+                  {isLocked ? (
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                  ) : isExpanded ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  )}
+                </button>
+                <AnimatePresence>
+                  {isExpanded && !isLocked && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 pb-3 space-y-2">
+                        <p className="text-[12px] text-foreground/75 leading-relaxed">
+                          {clause.explanation}
+                        </p>
+                        {clause.suggestion && (
+                          <div className="rounded-lg bg-primary/[0.04] border border-primary/10 p-2.5">
+                            <p className="text-[10px] font-semibold text-primary mb-1 uppercase tracking-wide">
+                              Suggested Rewrite
+                            </p>
+                            <p className="text-[12px] text-foreground/75 leading-relaxed">
+                              {clause.suggestion}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {isLocked && (
+                  <div className="px-4 pb-3">
+                    <p className="text-[11px] text-muted-foreground/60">
+                      Upgrade to Starter to unlock full clause details
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main upload component ──────────────────────────────────────────────────────
 
 function UploadContent() {
   const { estimateCost, checkAffordability } = useAuth();
@@ -56,10 +363,14 @@ function UploadContent() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  // ── File state ───────────────────────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [phase, setPhase] = useState<"upload" | "analyzing" | "results">("upload");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // ── Flow state ───────────────────────────────────────────────────────────────
+  const [phase, setPhase] = useState<AnalysisPhase>("upload");
   const [currentStep, setCurrentStep] = useState(0);
   const [analysisCost, setAnalysisCost] = useState<AnalysisCost | null>(null);
   const [includeRedlines, setIncludeRedlines] = useState(false);
@@ -76,6 +387,13 @@ function UploadContent() {
 
   // Polling — activates when analysisId is set
   const pollingState = useAnalysisPolling(analysisId);
+
+  // Revoke object URL on cleanup to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   // React to polling result
   useEffect(() => {
@@ -95,50 +413,52 @@ function UploadContent() {
         clearInterval(stepIntervalRef.current);
         stepIntervalRef.current = null;
       }
-      const errMsg = pollingState.error ?? "Analysis failed. Please try again.";
-      setAnalysisError(errMsg);
-      // Keep contractId so the retry button can re-submit without re-uploading
+      setAnalysisError(pollingState.error ?? "Analysis failed. Please try again.");
       setAnalysisId(null);
       setPhase("upload");
     }
-  }, [pollingState.status, pollingState.analysis, pollingState.creditsActual, pollingState.error, toast]);
+  }, [pollingState.status, pollingState.analysis, pollingState.creditsActual, pollingState.error]);
 
-  // Cleanup interval on unmount
   useEffect(() => {
-    return () => {
-      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
-    };
+    return () => { if (stepIntervalRef.current) clearInterval(stepIntervalRef.current); };
   }, []);
 
-  // ── File handlers ──────────────────────────────────────────────────────────
+  // ── File handlers ────────────────────────────────────────────────────────────
+
+  const applyFile = useCallback((f: File) => {
+    const err = validateFile(f);
+    setFileError(err);
+    if (err) return;
+    setFile(f);
+    setAnalysisError(null);
+    // Instant local preview — works for PDF/TXT natively in the browser
+    if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(f));
+  }, [previewUrl]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (!dropped) return;
-    const err = validateFile(dropped);
-    setFileError(err);
-    if (!err) setFile(dropped);
-  }, []);
+    if (dropped) applyFile(dropped);
+  }, [applyFile]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-    if (!selected) return;
-    const err = validateFile(selected);
-    setFileError(err);
-    if (!err) setFile(selected);
-  }, []);
+    if (selected) applyFile(selected);
+  }, [applyFile]);
 
   const handleRemoveFile = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setFile(null);
     setFileError(null);
     setAnalysisError(null);
+    if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, []);
+  }, [previewUrl]);
 
-  // ── Retry (re-submit with existing contractId, no re-upload) ──────────────
+  // ── Retry ────────────────────────────────────────────────────────────────────
 
   const handleRetry = useCallback(async () => {
     if (!contractId) return;
@@ -159,24 +479,16 @@ function UploadContent() {
 
     try {
       const result = await api.startAnalysis(contractId, includeRedlines, 6);
-      setAnalysisCost({
-        estimated_credits: result.estimated_credits,
-        actual_credits: 0,
-        breakdown: result.breakdown,
-      });
+      setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
       setAnalysisId(result.analysis_id);
     } catch (err: unknown) {
-      if (stepIntervalRef.current) {
-        clearInterval(stepIntervalRef.current);
-        stepIntervalRef.current = null;
-      }
-      const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
-      setAnalysisError(message);
+      if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
+      setAnalysisError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
       setPhase("upload");
     }
   }, [contractId, includeRedlines]);
 
-  // ── Analyze ────────────────────────────────────────────────────────────────
+  // ── Analyze ──────────────────────────────────────────────────────────────────
 
   const handleAnalyze = useCallback(async () => {
     if (!affordCheck.allowed || !file) return;
@@ -184,7 +496,6 @@ function UploadContent() {
     setCurrentStep(0);
     setAnalysisError(null);
 
-    // Cosmetic step animation — runs independently of real polling
     let step = 0;
     stepIntervalRef.current = setInterval(() => {
       step++;
@@ -196,189 +507,168 @@ function UploadContent() {
     }, 800);
 
     try {
-      // Step 1: Upload file (409 = duplicate, re-use existing contract_id)
-      const formData = new FormData();
-      formData.append("file", file);
-      let uploadedContractId: string;
-      try {
-        const upload = await api.uploadContract(formData);
-        uploadedContractId = upload.contract_id;
-      } catch (err) {
-        if (err instanceof api.ApiError && err.status === 409) {
-          // Server returns { contract_id } on duplicate — re-use it
-          uploadedContractId = (err.data?.contract_id as string) ?? "";
-          if (!uploadedContractId) throw err;
-        } else {
-          throw err;
-        }
-      }
+      const upload = await handleUpload(file);
+      const uploadedContractId = upload.contract_id;
       setContractId(uploadedContractId);
 
-      // Step 2: Queue analysis — returns analysis_id immediately (202 Accepted)
       const result = await api.startAnalysis(uploadedContractId, includeRedlines, 6);
-      setAnalysisCost({
-        estimated_credits: result.estimated_credits,
-        actual_credits: 0,
-        breakdown: result.breakdown,
-      });
-
-      // Step 3: Start polling — drives phase transition to "results"
+      setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
       setAnalysisId(result.analysis_id);
     } catch (err: unknown) {
-      if (stepIntervalRef.current) {
-        clearInterval(stepIntervalRef.current);
-        stepIntervalRef.current = null;
-      }
+      if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
       const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
-
-      // 402 = insufficient credits — surface clearly
       if (err instanceof api.ApiError && err.status === 402) {
         toast({ title: "Insufficient credits", description: message, variant: "destructive" });
       } else {
         toast({ title: "Analysis failed", description: message, variant: "destructive" });
       }
-
       setAnalysisError(message);
       setPhase("upload");
     }
   }, [affordCheck, file, includeRedlines, toast]);
 
-  // ── Derived display data ───────────────────────────────────────────────────
-
   const analysis = pollingState.analysis;
   const clauses = analysis?.clauses ?? [];
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <div className="max-w-[780px] space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold mb-1">Upload Contract</h1>
-        <p className="text-sm text-muted-foreground">
-          Upload a contract document and let AI analyze the risks.
-        </p>
-      </div>
+    // Break out of DashboardLayout's padding to fill the full content area
+    <div className="-m-5 md:-m-7 lg:-m-8 flex h-[calc(100vh-3.5rem)] overflow-hidden">
 
-      {!affordCheck.allowed && credits.plan_id === "free" && (
-        <UpgradeBanner feature="more credits" />
-      )}
+      {/* ── Left panel: Analysis ─────────────────────────────────────────── */}
+      <div className="w-[40%] min-w-[320px] flex flex-col border-r border-border/50 bg-background overflow-y-auto">
 
-      <AnimatePresence mode="wait">
-        {/* ── Upload phase ── */}
-        {phase === "upload" && (
-          <motion.div
-            key="upload"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-4"
-          >
-            {/* Hidden real file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.txt"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/95 backdrop-blur-sm">
+          <div>
+            <h1 className="text-[15px] font-semibold tracking-tight">Contract Analysis</h1>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {phase === "upload" && "Upload to begin"}
+              {phase === "analyzing" && "Analyzing your contract…"}
+              {phase === "results" && `${clauses.length} clauses · Risk score ${analysis?.overall_score ?? 0}`}
+            </p>
+          </div>
+          {phase === "results" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => {
+                setPhase("upload");
+                setFile(null);
+                if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+                setAnalysisCost(null);
+                setAnalysisId(null);
+                setContractId(null);
+                setAnalysisError(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
               }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`rounded-xl border-2 border-dashed p-12 text-center transition-all cursor-pointer ${
-                dragging
-                  ? "border-primary bg-primary/5"
-                  : file
-                    ? "border-primary/30 bg-primary/[0.02]"
-                    : "border-border hover:border-primary/30"
-              } ${
-                !affordCheck.allowed && credits.plan_id === "free"
-                  ? "opacity-50 pointer-events-none"
-                  : ""
-              }`}
-              data-testid="upload-dropzone"
             >
-              {file ? (
-                <div className="flex items-center justify-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-                  </div>
-                  <button
-                    onClick={handleRemoveFile}
-                    className="ml-3 h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent"
-                    data-testid="remove-file-btn"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+              New analysis
+            </Button>
+          )}
+        </div>
+
+        <div className="flex-1 p-5 space-y-4">
+
+          {/* ── Upload / File picker section ── */}
+          {phase === "upload" && (
+            <div className="space-y-3">
+              {!affordCheck.allowed && credits.plan_id === "free" && (
+                <UpgradeBanner feature="more credits" />
+              )}
+
+              {/* Hidden input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+
+              {/* Dropzone */}
+              {!file ? (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="upload-dropzone"
+                  className={`rounded-xl border-2 border-dashed p-8 text-center transition-all cursor-pointer ${
+                    dragging
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/30 hover:bg-muted/30"
+                  } ${!affordCheck.allowed && credits.plan_id === "free" ? "opacity-50 pointer-events-none" : ""}`}
+                >
+                  <Upload className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2.5" />
+                  <p className="text-[13px] font-medium mb-1">Drop your contract here</p>
+                  <p className="text-[11px] text-muted-foreground">PDF · DOCX · TXT · up to 10 MB</p>
                 </div>
               ) : (
-                <>
-                  <Upload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
-                  <p className="text-sm font-medium mb-1">
-                    Drop your contract here, or click to browse
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Supports PDF and DOCX up to 10MB
-                  </p>
-                </>
-              )}
-            </div>
-
-            {fileError && (
-              <p className="text-[11px] text-red-500">{fileError}</p>
-            )}
-
-            {analysisError && !fileError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex items-start gap-3">
-                <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium text-red-700 mb-1">Analysis failed</p>
-                  <p className="text-[11px] text-red-600 leading-relaxed">{analysisError}</p>
-                </div>
-                {contractId && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 h-7 text-[11px] border-red-200 text-red-600 hover:bg-red-100"
-                    onClick={handleRetry}
-                    data-testid="retry-analysis-btn"
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" /> Retry
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {file && !fileError && (
-              <>
-                {/* Credit cost estimation */}
                 <div className="rounded-xl border border-border bg-white p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Coins className="h-4 w-4 text-primary" />
-                    <span className="text-[13px] font-medium">Estimated Credit Cost</span>
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                      <FileText className="h-4.5 w-4.5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium truncate">{file.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatFileSize(file.size)}</p>
+                    </div>
+                    <button
+                      onClick={handleRemoveFile}
+                      className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent shrink-0"
+                      data-testid="remove-file-btn"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <div className="space-y-1.5 mb-3">
+                </div>
+              )}
+
+              {fileError && <p className="text-[11px] text-red-500">{fileError}</p>}
+
+              {/* Analysis error + retry */}
+              {analysisError && !fileError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex items-start gap-2.5">
+                  <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium text-red-700">Analysis failed</p>
+                    <p className="text-[11px] text-red-600 mt-0.5 leading-relaxed">{analysisError}</p>
+                  </div>
+                  {contractId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] border-red-200 text-red-600 hover:bg-red-100 shrink-0"
+                      onClick={handleRetry}
+                      data-testid="retry-analysis-btn"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" /> Retry
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Credit cost + Analyze CTA */}
+              {file && !fileError && (
+                <div className="rounded-xl border border-border bg-white p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-primary" />
+                    <span className="text-[12px] font-semibold">Estimated Cost</span>
+                  </div>
+                  <div className="space-y-1.5">
                     {estimated.breakdown.map((item, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between text-[12px]"
-                      >
+                      <div key={i} className="flex items-center justify-between text-[12px]">
                         <span className="text-muted-foreground">{item.label}</span>
                         <span className="font-medium">{item.credits} credits</span>
                       </div>
                     ))}
                     <div className="border-t border-border/40 pt-1.5 flex items-center justify-between text-[12px] font-semibold">
                       <span>Total</span>
-                      <span className="text-primary">
-                        {estimated.estimated_credits} credits
-                      </span>
+                      <span className="text-primary">{estimated.estimated_credits} credits</span>
                     </div>
                   </div>
                   {credits.can_redline && (
@@ -389,288 +679,127 @@ function UploadContent() {
                         onChange={(e) => setIncludeRedlines(e.target.checked)}
                         className="rounded border-border"
                       />
-                      Include redline suggestions (+{6 * credits.CREDIT_COSTS.REDLINE} credits)
+                      Include redlines (+{6 * credits.CREDIT_COSTS.REDLINE} credits)
                     </label>
                   )}
                   {!affordCheck.allowed && (
-                    <p className="text-[11px] text-red-500 mt-2">{affordCheck.reason}</p>
+                    <p className="text-[11px] text-red-500">{affordCheck.reason}</p>
                   )}
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    Balance after:{" "}
-                    {Math.max(0, credits.credits_remaining - estimated.estimated_credits)}{" "}
-                    credits
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleAnalyze}
-                  className="w-full h-11"
-                  disabled={!affordCheck.allowed}
-                  data-testid="analyze-btn"
-                >
-                  <Sparkles className="mr-2 h-4 w-4" /> Analyze Contract (
-                  {estimated.estimated_credits} credits)
-                </Button>
-              </>
-            )}
-          </motion.div>
-        )}
-
-        {/* ── Analyzing phase ── */}
-        {phase === "analyzing" && (
-          <motion.div
-            key="analyzing"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="rounded-xl border border-border bg-white p-8"
-          >
-            <div className="flex flex-col items-center mb-7">
-              {pollingState.backendStatus === "queued" ? (
-                <div className="h-10 w-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-4">
-                  <Clock className="h-5 w-5 text-amber-500" />
-                </div>
-              ) : (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent mb-4"
-                />
-              )}
-              <h3 className="text-sm font-semibold mb-1">
-                {pollingState.backendStatus === "queued"
-                  ? "Queued"
-                  : "Analyzing Contract"}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {pollingState.backendStatus === "queued"
-                  ? "Waiting for a worker to pick up your job…"
-                  : "This usually takes 10–30 seconds"}
-              </p>
-            </div>
-            <div className="max-w-xs mx-auto space-y-2.5">
-              {demoSteps.map((step, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: i <= currentStep ? 1 : 0.2, x: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                  className="flex items-center gap-3"
-                >
-                  {i < currentStep ? (
-                    <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Check className="h-3 w-3 text-primary" />
-                    </div>
-                  ) : i === currentStep ? (
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent"
-                    />
-                  ) : (
-                    <div className="h-5 w-5 rounded-full border border-border" />
-                  )}
-                  <span
-                    className={`text-[12px] ${i <= currentStep ? "text-foreground" : "text-muted-foreground/30"}`}
+                  <Button
+                    onClick={handleAnalyze}
+                    className="w-full h-10"
+                    disabled={!affordCheck.allowed}
+                    data-testid="analyze-btn"
                   >
-                    {step}
-                  </span>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── Results phase ── */}
-        {phase === "results" && (
-          <motion.div
-            key="results"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="space-y-6"
-          >
-            {/* Risk bar + credit cost summary */}
-            <div className="rounded-xl border border-border bg-white p-6 space-y-4">
-              <RiskBar score={analysis?.overall_score ?? 0} />
-              <div className="flex items-start justify-between pt-2 border-t border-border/40">
-                <div>
-                  <p className="text-sm font-semibold">Overall Risk Assessment</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {clauses.filter((c) => c.risk_level === "HIGH").length} high-risk,{" "}
-                    {clauses.filter((c) => c.risk_level === "MEDIUM").length} medium-risk clauses
-                  </p>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Analyze Contract ({estimated.estimated_credits} credits)
+                  </Button>
                 </div>
-                {analysisCost && (
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Credits used</p>
-                    <p className="text-sm font-semibold text-primary">
-                      {analysisCost.actual_credits}
-                    </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Analyzing progress ── */}
+          {phase === "analyzing" && (
+            <div className="rounded-xl border border-border bg-white p-5">
+              <div className="flex flex-col items-center mb-5">
+                {pollingState.backendStatus === "queued" ? (
+                  <div className="h-9 w-9 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-3">
+                    <Clock className="h-4.5 w-4.5 text-amber-500" />
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Clauses */}
-            <div>
-              <h2 className="text-sm font-semibold mb-3">Clause Analysis</h2>
-              <div className="space-y-2">
-                {clauses.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No clauses found in this contract.
-                  </p>
                 ) : (
-                  clauses.map((clause, i) => {
-                    const isExpanded = expandedClause === clause.id;
-                    const isLocked = !credits.can_redline && i >= 2;
-                    const riskClass = clause.risk_level.toLowerCase();
-                    return (
-                      <motion.div
-                        key={clause.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.04, duration: 0.25 }}
-                        className={`rounded-xl border overflow-hidden bg-white ${
-                          clause.risk_level === "HIGH"
-                            ? "border-red-200"
-                            : clause.risk_level === "MEDIUM"
-                              ? "border-amber-200"
-                              : "border-green-200"
-                        }`}
-                      >
-                        <button
-                          onClick={() =>
-                            !isLocked &&
-                            setExpandedClause(isExpanded ? null : clause.id)
-                          }
-                          className="w-full flex items-center gap-3 p-4 text-left"
-                          data-testid={`clause-${clause.id}`}
-                        >
-                          <AlertTriangle
-                            className={`h-4 w-4 shrink-0 risk-${riskClass}`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium">{clause.title}</p>
-                            <p className="text-[12px] text-muted-foreground truncate mt-0.5">
-                              {clause.text}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
-                              clause.risk_level === "HIGH"
-                                ? "bg-red-50 text-red-600"
-                                : clause.risk_level === "MEDIUM"
-                                  ? "bg-amber-50 text-amber-600"
-                                  : "bg-green-50 text-green-600"
-                            }`}
-                          >
-                            {clause.risk_level}
-                          </span>
-                          {isLocked ? (
-                            <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
-                          ) : isExpanded ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
-
-                        <AnimatePresence>
-                          {isExpanded && !isLocked && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="border-t border-border/40"
-                            >
-                              <div className="p-4 space-y-3">
-                                <div>
-                                  <p className="text-[11px] font-medium text-muted-foreground mb-1">
-                                    Explanation
-                                  </p>
-                                  <p className="text-[13px] text-foreground/80 leading-relaxed">
-                                    {clause.explanation}
-                                  </p>
-                                </div>
-                                {clause.suggestion && (
-                                  <div className="rounded-lg bg-primary/[0.03] border border-primary/10 p-3">
-                                    <p className="text-[11px] font-medium text-primary mb-1">
-                                      Suggested Rewrite
-                                    </p>
-                                    <p className="text-[13px] text-foreground/80 leading-relaxed">
-                                      {clause.suggestion}
-                                    </p>
-                                  </div>
-                                )}
-                                {clause.issues.length > 0 && (
-                                  <div>
-                                    <p className="text-[11px] font-medium text-muted-foreground mb-1">
-                                      Issues
-                                    </p>
-                                    <ul className="space-y-1">
-                                      {clause.issues.map((issue, j) => (
-                                        <li
-                                          key={j}
-                                          className="text-[12px] text-foreground/70 leading-relaxed"
-                                        >
-                                          • {issue}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
-                        {isLocked && (
-                          <div className="px-4 pb-3">
-                            <div className="rounded-lg bg-muted/50 p-3 flex items-center gap-2">
-                              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-[12px] text-muted-foreground">
-                                Upgrade to Starter or above for redline access
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    );
-                  })
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="h-9 w-9 rounded-full border-2 border-primary border-t-transparent mb-3"
+                  />
                 )}
+                <p className="text-[13px] font-semibold">
+                  {pollingState.backendStatus === "queued" ? "Queued" : "Analyzing"}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {pollingState.backendStatus === "queued"
+                    ? "Waiting for a worker…"
+                    : "Usually 10–30 seconds"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                {demoSteps.map((step, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: i <= currentStep ? 1 : 0.2, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex items-center gap-2.5"
+                  >
+                    {i < currentStep ? (
+                      <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="h-2.5 w-2.5 text-primary" />
+                      </div>
+                    ) : i === currentStep ? (
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        className="h-4 w-4 rounded-full border-[1.5px] border-primary border-t-transparent shrink-0"
+                      />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-border shrink-0" />
+                    )}
+                    <span className={`text-[12px] ${i <= currentStep ? "text-foreground" : "text-muted-foreground/30"}`}>
+                      {step}
+                    </span>
+                  </motion.div>
+                ))}
               </div>
             </div>
+          )}
 
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setPhase("upload");
-                  setFile(null);
-                  setAnalysisCost(null);
-                  setAnalysisId(null);
-                  setContractId(null);
-                  setAnalysisError(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                data-testid="analyze-another-btn"
-              >
-                Analyze Another
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setLocation("/reports")}
-                data-testid="view-reports-btn"
-              >
-                View Reports
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {/* ── Analysis sections (visible in all phases) ── */}
+          <AnalysisSections
+            phase={phase}
+            clauses={clauses}
+            overallScore={analysis?.overall_score ?? 0}
+            analysisCost={analysisCost}
+            expandedClause={expandedClause}
+            setExpandedClause={setExpandedClause}
+            canRedline={credits.can_redline}
+          />
+
+          {/* View reports link after results */}
+          {phase === "results" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-[12px]"
+              onClick={() => setLocation("/reports")}
+              data-testid="view-reports-btn"
+            >
+              View all reports
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Right panel: Contract viewer ─────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-muted/20">
+        {/* Viewer header */}
+        <div className="flex items-center gap-3 px-5 h-[53px] border-b border-border/40 bg-white/80 backdrop-blur-sm shrink-0">
+          <FileText className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+          <span className="text-[12px] text-muted-foreground truncate">
+            {file ? file.name : "No contract loaded"}
+          </span>
+          {file && (
+            <span className="ml-auto text-[11px] text-muted-foreground/50 shrink-0">
+              {formatFileSize(file.size)}
+            </span>
+          )}
+        </div>
+
+        {/* Viewer body */}
+        <div className="flex-1 overflow-hidden">
+          <ContractViewer previewUrl={previewUrl} filename={file?.name ?? null} />
+        </div>
+      </div>
     </div>
   );
 }

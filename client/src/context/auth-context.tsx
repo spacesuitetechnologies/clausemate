@@ -110,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed. Please try again.";
       setAuthError(message);
@@ -118,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsAuthLoading(false);
     }
-  }, [queryClient]);
+  }, []);
 
   const signup = useCallback(async (email: string, password: string) => {
     setIsAuthLoading(true);

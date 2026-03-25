@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, Search, Clock, AlertTriangle, Download, Filter, Loader2, RefreshCw } from "lucide-react";
+import { FileText, Search, Clock, AlertTriangle, Download, Filter, Loader2, RefreshCw, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -8,14 +8,29 @@ import { RiskBar } from "@/components/RiskBar";
 import { useContracts, useContractAnalysis } from "@/hooks/use-contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
+import { getSignedUrlById } from "@/lib/contracts";
 import { useToast } from "@/hooks/use-toast";
 
 function ReportsContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const handleView = useCallback(async (contractId: string) => {
+    setViewingId(contractId);
+    try {
+      const url = await getSignedUrlById(contractId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not open file.";
+      toast({ title: "Could not open file", description: msg, variant: "destructive" });
+    } finally {
+      setViewingId(null);
+    }
+  }, [toast]);
 
   const { data: contracts = [], isLoading: contractsLoading } = useContracts();
   const { data: analysis, isLoading: analysisLoading } = useContractAnalysis(selectedId);
@@ -149,14 +164,31 @@ function ReportsContent() {
                     {selected.clause_count ?? 0} clauses
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  data-testid="export-btn"
-                >
-                  <Download className="h-3.5 w-3.5" /> Export
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleView(selected.id)}
+                    disabled={viewingId === selected.id}
+                    data-testid="view-file-btn"
+                  >
+                    {viewingId === selected.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    )}
+                    {viewingId === selected.id ? "Opening…" : "View"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    data-testid="export-btn"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Export
+                  </Button>
+                </div>
               </div>
 
               <div className="px-2">

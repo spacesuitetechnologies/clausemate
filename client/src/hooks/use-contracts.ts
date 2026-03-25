@@ -1,13 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
 import * as api from "@/lib/api";
+import { fetchUserContracts } from "@/lib/contracts";
 import { mapAnalysisResponse } from "@/lib/mappers/analysis.mapper";
 
 export function useContracts() {
   const { isAuthenticated } = useAuth();
   return useQuery({
     queryKey: ["contracts"],
-    queryFn: api.fetchContracts,
+    // Mock mode → existing in-memory mock; real mode → Supabase
+    queryFn: api.USE_MOCK ? api.fetchContracts : fetchUserContracts,
     staleTime: 60_000,
     enabled: isAuthenticated,
   });
