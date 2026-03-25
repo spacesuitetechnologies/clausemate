@@ -5,7 +5,9 @@ import {
   useCallback,
   useEffect,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
 import type { UserPlan, PlanId, AnalysisCost } from "@/lib/credits";
 import { estimateAnalysisCost, canAfford } from "@/lib/credits";
 import * as api from "@/lib/api";
@@ -22,6 +24,7 @@ interface AuthContextType {
   isInitializing: boolean;
   authError: string | null;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 
   // Credits
@@ -56,6 +59,15 @@ const defaultPlan: UserPlan = {
   can_rewrite: false,
 };
 
+function sessionToUser(session: Session | null): AuthUser | null {
+  if (!session?.user) return null;
+  const { email, user_metadata } = session.user;
+  return {
+    email: email ?? "",
+    name: user_metadata?.full_name ?? user_metadata?.name ?? email ?? "",
+  };
+}
+
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -65,64 +77,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Restore session from httpOnly cookie on mount — if the cookie is valid
-  // the server returns the user profile; a 401 means no active session.
+  // Restore session on mount, then listen for auth state changes.
   useEffect(() => {
-    api
-      .fetchUserMe()
-      .then((me) => setUser({ name: me.name, email: me.email }))
-      .catch(() => {}) // 401 = not logged in, local state stays null
-      .finally(() => setIsInitializing(false));
-  }, []);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(sessionToUser(session));
+      setIsInitializing(false);
+    });
 
-  // User plan via React Query — only active when authenticated
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(sessionToUser(session));
+        if (!session) queryClient.clear();
+      },
+    );
+
+    return () => subscription.unsubscribe();
+  }, [queryClient]);
+
   const isAuthenticated = !!user;
-  const {
-    data: userPlan = defaultPlan,
-    isLoading: planLoading,
-    refetch: refetchPlan,
-  } = useQuery({
-    queryKey: ["user", "plan"],
-    queryFn: api.fetchUserPlan,
-    enabled: isAuthenticated,
-    staleTime: 30_000,
-  });
+
+  // Plan data is served from the backend when available.
+  // Until a backend is connected, the free-tier default is used.
+  const [userPlan] = useState<UserPlan>(defaultPlan);
 
   const refreshCredits = useCallback(async () => {
-    await refetchPlan();
-  }, [refetchPlan]);
+    // no-op until backend plan endpoint is wired up
+  }, []);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      setIsAuthLoading(true);
-      setAuthError(null);
-      try {
-        const { user: u } = await api.loginUser(email, password);
-        setUser({ name: u.name, email: u.email });
-        // Prime plan cache immediately after login
-        queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Login failed. Please try again.";
-        setAuthError(message);
-        throw err;
-      } finally {
-        setIsAuthLoading(false);
-      }
-    },
-    [queryClient],
-  );
+  const login = useCallback(async (email: string, password: string) => {
+    setIsAuthLoading(true);
+    setAuthError(null);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Login failed. Please try again.";
+      setAuthError(message);
+      throw err;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, [queryClient]);
+
+  const signup = useCallback(async (email: string, password: string) => {
+    setIsAuthLoading(true);
+    setAuthError(null);
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Sign up failed. Please try again.";
+      setAuthError(message);
+      throw err;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await api.logoutUser();
-    } catch {
-      // Clear local state regardless of server response
-    }
-    setUser(null);
+    await supabase.auth.signOut();
     setAuthError(null);
-    queryClient.clear();
-  }, [queryClient]);
+  }, []);
 
   /**
    * upgradePlan — initiates the Razorpay subscription checkout flow.
@@ -259,6 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isInitializing,
         authError,
         login,
+        signup,
         logout,
         userPlan,
         refreshCredits,
@@ -266,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         consumeCredits,
         estimateCost,
         checkAffordability,
-        isLoading: isAuthLoading || planLoading,
+        isLoading: isAuthLoading,
       }}
     >
       {children}

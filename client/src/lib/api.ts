@@ -87,50 +87,6 @@ export function resetMockState(planId: PlanId = "free"): void {
   };
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-export async function loginUser(
-  email: string,
-  password: string,
-): Promise<{ user: { id: string; email: string; name: string } }> {
-  if (USE_MOCK) {
-    await delay(400);
-    resetMockState("free");
-    return { user: { id: "mock-user-id", email, name: "Demo User" } };
-  }
-  const res = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
-  });
-  return handleResponse(res);
-}
-
-export async function logoutUser(): Promise<void> {
-  if (USE_MOCK) {
-    await delay(100);
-    return;
-  }
-  await fetch(`${BASE_URL}/auth/logout`, {
-    method: "POST",
-    credentials: "include",
-  });
-}
-
-export async function fetchUserMe(): Promise<{
-  id: string;
-  email: string;
-  name: string;
-}> {
-  if (USE_MOCK) {
-    await delay(100);
-    return { id: "mock-user-id", email: "demo@clausemate.in", name: "Demo User" };
-  }
-  const res = await fetch(`${BASE_URL}/user/me`, { credentials: "include" });
-  return handleResponse(res);
-}
-
 // ── User Plan / Credits ───────────────────────────────────────────────────────
 
 export async function fetchUserPlan(): Promise<UserPlan> {

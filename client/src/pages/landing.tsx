@@ -450,9 +450,20 @@ function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login } = useAuth();
+  const { login, signup, authError } = useAuth();
   const [, setLocation] = useLocation();
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); login(email || "arjun@startup.in", password || "demo"); setLocation("/dashboard"); onClose(); };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isSignup) {
+        await signup(email, password);
+      } else {
+        await login(email, password);
+      }
+      setLocation("/dashboard");
+      onClose();
+    } catch { /* authError is set by login/signup and displayed below */ }
+  };
 
   return (
     <AnimatePresence>
@@ -474,6 +485,7 @@ function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               <div><label className="text-[11px] font-medium mb-1.5 block text-muted-foreground">Email</label><Input type="email" placeholder="you@firm.in" value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 text-[13px]" data-testid="login-email-input" /></div>
               <div><label className="text-[11px] font-medium mb-1.5 block text-muted-foreground">Password</label><Input type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-10 text-[13px]" data-testid="login-password-input" /></div>
               <Button type="submit" className="w-full h-10" data-testid="login-submit-btn">{isSignup ? "Create Account" : "Sign In"}</Button>
+              {authError && <p className="text-[11px] text-destructive pt-1">{authError}</p>}
             </form>
             <p className="text-center text-[11px] text-muted-foreground mt-5">{isSignup ? "Already have an account?" : "Don't have an account?"}{" "}<button onClick={() => setIsSignup(!isSignup)} className="text-primary hover:underline" data-testid="toggle-signup-btn">{isSignup ? "Sign in" : "Sign up"}</button></p>
           </motion.div>
