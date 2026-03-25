@@ -33,6 +33,7 @@ import * as api from "@/lib/api";
 import { handleUpload } from "@/lib/upload";
 import type { AnalysisCost } from "@/lib/credits";
 import type { ClauseResult } from "@/types/analysis";
+import type { AnalyzeContractResult } from "@/lib/api";
 
 // ── File validation ────────────────────────────────────────────────────────────
 
@@ -378,6 +379,7 @@ function UploadContent() {
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [contractId, setContractId] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [directResult, setDirectResult] = useState<AnalyzeContractResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -511,9 +513,16 @@ function UploadContent() {
       const uploadedContractId = upload.contract_id;
       setContractId(uploadedContractId);
 
-      const result = await api.startAnalysis(uploadedContractId, includeRedlines, 6);
-      setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
-      setAnalysisId(result.analysis_id);
+      if (api.USE_MOCK) {
+        const result = await api.startAnalysis(uploadedContractId, includeRedlines, 6);
+        setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
+        setAnalysisId(result.analysis_id);
+      } else {
+        const result = await api.analyzeContract(uploadedContractId);
+        if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
+        setDirectResult(result);
+        setPhase("results");
+      }
     } catch (err: unknown) {
       if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
       const message = err instanceof Error ? err.message : "Analysis failed. Please try again.";
@@ -563,6 +572,7 @@ function UploadContent() {
                 setAnalysisId(null);
                 setContractId(null);
                 setAnalysisError(null);
+                setDirectResult(null);
                 if (fileInputRef.current) fileInputRef.current.value = "";
               }}
             >
@@ -754,16 +764,59 @@ function UploadContent() {
             </div>
           )}
 
-          {/* ── Analysis sections (visible in all phases) ── */}
-          <AnalysisSections
-            phase={phase}
-            clauses={clauses}
-            overallScore={analysis?.overall_score ?? 0}
-            analysisCost={analysisCost}
-            expandedClause={expandedClause}
-            setExpandedClause={setExpandedClause}
-            canRedline={credits.can_redline}
-          />
+          {/* ── Direct result (real API mode) ── */}
+          {phase === "results" && directResult && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border/60 bg-white p-4 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <BarChart3 className="h-4 w-4 text-primary/70" />
+                  <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">Summary</span>
+                </div>
+                <p className="text-[12px] text-muted-foreground leading-relaxed">{directResult.summary}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-white p-4 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldAlert className="h-4 w-4 text-primary/70" />
+                  <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">Risks</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {directResult.risks.map((risk, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-red-100 flex items-center justify-center text-[9px] font-bold text-red-600">!</span>
+                      <span className="text-[12px] text-muted-foreground">{risk}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-white p-4 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <ListChecks className="h-4 w-4 text-primary/70" />
+                  <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground/70">Key Clauses</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {directResult.clauses.map((clause, i) => (
+                    <li key={i} className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                      <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                      {clause}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* ── Analysis sections (mock polling mode) ── */}
+          {!directResult && (
+            <AnalysisSections
+              phase={phase}
+              clauses={clauses}
+              overallScore={analysis?.overall_score ?? 0}
+              analysisCost={analysisCost}
+              expandedClause={expandedClause}
+              setExpandedClause={setExpandedClause}
+              canRedline={credits.can_redline}
+            />
+          )}
 
           {/* View reports link after results */}
           {phase === "results" && (

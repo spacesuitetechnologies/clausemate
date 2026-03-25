@@ -303,6 +303,34 @@ export async function startAnalysis(
   return handleResponse(res);
 }
 
+// ── Direct analysis (mock server endpoint) ────────────────────────────────────
+
+export interface AnalyzeContractResult {
+  summary: string;
+  risks: string[];
+  clauses: string[];
+}
+
+export async function analyzeContract(
+  contractId: string,
+): Promise<AnalyzeContractResult> {
+  if (USE_MOCK) {
+    await delay(800);
+    return {
+      summary: "This is a sample contract summary.",
+      risks: ["Payment delay risk", "Termination clause unclear"],
+      clauses: ["Payment terms", "Liability clause"],
+    };
+  }
+  const res = await fetch(`${BASE_URL}/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ contract_id: contractId }),
+  });
+  return handleResponse(res);
+}
+
 export async function getAnalysisResult(analysisId: string): Promise<AnalysisResponse> {
   if (USE_MOCK) {
     // Simulate a short processing delay then return completed

@@ -6,9 +6,20 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // prefix all routes with /api
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. app.get("/api/items", async (_req, res) => { ... })
+  // POST /api/analyze — mock contract analysis endpoint
+  app.post("/api/analyze", (req, res) => {
+    const { contract_id } = req.body;
+
+    if (!contract_id) {
+      return res.status(400).json({ error: "contract_id is required" });
+    }
+
+    return res.json({
+      summary: "This is a sample contract summary.",
+      risks: ["Payment delay risk", "Termination clause unclear"],
+      clauses: ["Payment terms", "Liability clause"],
+    });
+  });
 
   return httpServer;
 }
