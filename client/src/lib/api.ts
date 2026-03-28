@@ -304,7 +304,7 @@ export async function startAnalysis(
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
-    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines }),
+    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines === true }),
   });
   if (res.status === 402) {
     const body = await res.json().catch(() => ({}));
@@ -339,7 +339,7 @@ export async function analyzeContract(
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
-    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines }),
+    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines === true }),
   });
   return handleResponse(res);
 }

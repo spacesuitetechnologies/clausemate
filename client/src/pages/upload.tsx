@@ -47,9 +47,8 @@ function validateFile(f: File): string | null {
   if (f.size === 0) {
     return "File is empty. Please upload a valid contract document.";
   }
-  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!["pdf", "docx", "txt"].includes(ext)) {
-    return "Only PDF, DOCX, or TXT files are supported.";
+  if (f.type !== "application/pdf") {
+    return "Only PDF files are supported.";
   }
   if (f.size > MAX_FILE_SIZE) {
     return `File too large. Max size is 10 MB (got ${(f.size / 1024 / 1024).toFixed(1)} MB).`;
@@ -693,7 +692,7 @@ function UploadContent() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.txt"
+                accept=".pdf,application/pdf"
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -714,7 +713,7 @@ function UploadContent() {
                 >
                   <Upload className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2.5 transition-transform duration-200 group-hover:scale-110 group-hover:text-primary/50" />
                   <p className="text-[13px] font-medium mb-1">Drop your contract here</p>
-                  <p className="text-[11px] text-muted-foreground/70">PDF · DOCX · TXT · up to 10 MB</p>
+                  <p className="text-[11px] text-muted-foreground/70">PDF only · up to 10 MB</p>
                 </div>
               ) : (
                 <div className="rounded-xl border border-border bg-white p-4 transition-colors duration-200 hover:border-primary/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">

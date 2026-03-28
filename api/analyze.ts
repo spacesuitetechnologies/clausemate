@@ -2,19 +2,16 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Env vars ─────────────────────────────────────────────────────────────────
-// SUPABASE_ANON_KEY   — used for JWT validation (public, safe in edge functions)
-// SUPABASE_SERVICE_ROLE_KEY — used for storage download (secret, server-only)
 const supabaseUrl = process.env.SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
-// Max characters to pass to LLM — trim very long contracts to control token cost
+// Max characters to pass to LLM
 const MAX_TEXT_CHARS = 40_000;
 
 // ── In-memory rate limit store ────────────────────────────────────────────────
-// Tracks last request timestamp per user. Resets on function cold-start (acceptable).
 const lastRequestAt = new Map<string, number>();
-const RATE_LIMIT_MS = 5_000; // 1 request per 5 seconds per user
+const RATE_LIMIT_MS = 5_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -54,11 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   lastRequestAt.set(user.id, now);
 
   // ── Input validation ─────────────────────────────────────────────────────────
-  const { contract_id, include_redlines } = req.body ?? {};
-  const includeRedlines = include_redlines === true;
+  const body = req.body ?? {};
+  const contract_id: unknown = body.contract_id;
+  const includeRedlines: boolean = body.include_redlines === true;
+
+  console.log("[analyze] Request:", { contract_id, include_redlines: includeRedlines });
 
   if (!contract_id || typeof contract_id !== "string") {
-    return res.status(400).json({ error: "contract_id is required" });
+    return res.status(400).json({ error: "Missing contract_id" });
   }
 
   // ── Fetch contract (ownership enforced via user_id filter) ───────────────────
@@ -75,6 +75,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: "Contract not found" });
   }
 
+  // ── File type guard ───────────────────────────────────────────────────────────
+  const filePath: string = contract.file_url ?? "";
+  if (!filePath.toLowerCase().endsWith(".pdf")) {
+    return res.status(400).json({ error: "Invalid file type. Only PDF allowed." });
+  }
+
   // ── Download file from Supabase Storage ──────────────────────────────────────
   const { data: fileBlob, error: downloadError } = await serviceClient.storage
     .from("contracts")
@@ -85,30 +91,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(502).json({ error: "Could not retrieve contract file" });
   }
 
+  if (fileBlob.size === 0) {
+    return res.status(422).json({ error: "File is empty. Cannot analyze." });
+  }
+
   // ── Extract PDF text ─────────────────────────────────────────────────────────
   let extractedText: string;
   try {
     const pdfModule = await import("pdf-parse");
     const pdfParse = (pdfModule as any).default || pdfModule;
-    const buffer = Buffer.from(await fileBlob.arrayBuffer());
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     const parsed = await pdfParse(buffer);
     extractedText = parsed.text?.trim() ?? "";
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown parse error";
-    console.error("[analyze] pdf-parse failed:", message);
-    return res
-      .status(422)
-      .json({ error: "Could not parse PDF — file may be corrupted or password-protected" });
+    const reason = err instanceof Error ? err.message : "Unknown parse error";
+    console.error("[analyze] pdf-parse failed:", reason);
+    return res.status(422).json({
+      error: "Failed to analyze contract",
+      reason,
+    });
   }
 
   if (!extractedText) {
     return res.status(422).json({
-      error:
-        "PDF contains no extractable text — it may be a scanned image. Please upload a text-based PDF.",
+      error: "Failed to analyze contract",
+      reason: "PDF contains no extractable text — it may be a scanned image.",
     });
   }
 
-  // Trim to token budget (LLM integration will use this field)
+  // Trim to token budget
   const trimmedText =
     extractedText.length > MAX_TEXT_CHARS
       ? extractedText.slice(0, MAX_TEXT_CHARS)
@@ -124,7 +136,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     char_count: trimmedText.length,
     was_trimmed: wasTrimmed,
     include_redlines: includeRedlines,
-    // Analysis fields — populated once LLM is integrated
     summary: null,
     risks: [] as string[],
     clauses: [] as string[],
