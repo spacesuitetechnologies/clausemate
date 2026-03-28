@@ -555,6 +555,7 @@ export default function LandingPage() {
           </div>
           <p className="text-[10px] text-muted-foreground/50">© 2026 Spacesuite Technologies LLP</p>
         </div>
+        <p className="text-center mt-4 text-xs text-muted-foreground/50">Made in 🇮🇳 for the world</p>
       </footer>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
