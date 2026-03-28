@@ -63,12 +63,12 @@ export async function saveDirectAnalysis(
       analysisPayload.risk_score = result.risk_score;
     }
 
-    const { error: upsertError } = await supabase
+    const { error: insertError } = await supabase
       .from("analyses")
-      .upsert(analysisPayload, { onConflict: "contract_id" });
+      .insert(analysisPayload);
 
-    if (upsertError) {
-      console.error("[saveDirectAnalysis] SUPABASE SAVE ERROR:", upsertError);
+    if (insertError) {
+      console.error("[saveDirectAnalysis] SUPABASE ERROR FULL:", JSON.stringify(insertError));
       // Don't throw — fall through to contract update attempt
     }
 
@@ -94,7 +94,7 @@ export async function saveDirectAnalysis(
       // Don't throw — save is best-effort
     }
 
-    return !upsertError && !contractUpdateError;
+    return !insertError && !contractUpdateError;
   } catch (err) {
     console.error("[saveDirectAnalysis] SAVE CRASH:", err);
     return false;

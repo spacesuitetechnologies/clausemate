@@ -266,16 +266,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         filename.toLowerCase().endsWith(".pdf");
 
       if (isPdf) {
-        // pdf-parse v2: named export PDFParse class
-        // new PDFParse({ data: buffer }) → parser.getText() → TextResult { text: string }
-        const { PDFParse } = await import("pdf-parse");
-        const parser = new PDFParse({ data: buffer });
-        try {
-          const result = await parser.getText();
-          extractedText = result.text?.trim() ?? "";
-        } finally {
-          await parser.destroy();
+        const pdfParse = (await import("pdf-parse")).default;
+        const parsed = await pdfParse(buffer);
+        extractedText = parsed?.text?.trim() ?? "";
+        if (!extractedText || extractedText.length < 20) {
+          return res.status(200).json(safeExit("PARSE_FAILED", "Could not extract text from PDF — document may be a scanned image or corrupted"));
         }
+        console.log("[analyze] PDF TEXT LENGTH:", extractedText.length);
       } else {
         // Plain text fallback
         extractedText = buffer.toString("utf-8").trim();
