@@ -544,18 +544,20 @@ export default function LandingPage() {
 
       <footer className="border-t border-border/50 py-6 px-4 sm:px-6">
         <div className="max-w-[1140px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-4 flex-wrap justify-center">
-            <a href="mailto:admin@spacesuite.io" className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"><Mail className="h-3 w-3" /> admin@spacesuite.io</a>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-              <Link href="/privacy"><span className="hover:text-foreground cursor-pointer">Privacy</span></Link>
-              <Link href="/terms"><span className="hover:text-foreground cursor-pointer">Terms</span></Link>
-              <Link href="/security"><span className="hover:text-foreground cursor-pointer">Security</span></Link>
-            </div>
+          <a href="mailto:admin@spacesuite.io" className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+            <Mail className="h-3 w-3" /> admin@spacesuite.io
+          </a>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap justify-center">
+            <Link href="/privacy"><span className="hover:text-foreground cursor-pointer transition-colors">Privacy</span></Link>
+            <span className="text-border/70">·</span>
+            <Link href="/terms"><span className="hover:text-foreground cursor-pointer transition-colors">Terms</span></Link>
+            <span className="text-border/70">·</span>
+            <Link href="/security"><span className="hover:text-foreground cursor-pointer transition-colors">Security</span></Link>
+            <span className="text-border/70">·</span>
+            <span>Made in 🇮🇳 for the world</span>
           </div>
-          <p className="text-[10px] text-muted-foreground/50">© 2026 Spacesuite Technologies LLP</p>
+          <p className="text-xs text-muted-foreground/70">© 2026 Spacesuite Technologies LLP</p>
         </div>
-        <p className="text-center mt-4 text-xs text-muted-foreground/50">Made in 🇮🇳 for the world</p>
       </footer>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
