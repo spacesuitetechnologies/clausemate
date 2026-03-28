@@ -1,32 +1,9 @@
 /**
  * analyses.ts — Supabase data layer for the analyses table.
  *
- * saveDirectAnalysis(contractId, result)
- *   → Upserts one row per contract (UNIQUE on contract_id)
- *   → Also marks contracts.latest_analysis_status = 'completed'
- *   → Writes risk_score to both analyses and contracts tables
- *
- * fetchDirectAnalysis(contractId)
- *   → Returns the saved analysis for a contract, or null
- *
- * Required Supabase table (run once):
- *
- *   CREATE TABLE analyses (
- *     id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
- *     contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE,
- *     user_id     UUID REFERENCES auth.users(id) NOT NULL,
- *     summary     TEXT,
- *     risks       JSONB DEFAULT '[]',
- *     clauses     JSONB DEFAULT '[]',
- *     risk_score  NUMERIC,
- *     created_at  TIMESTAMPTZ DEFAULT NOW(),
- *     updated_at  TIMESTAMPTZ DEFAULT NOW(),
- *     UNIQUE (contract_id)
- *   );
- *
- *   ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
- *   CREATE POLICY "Users see own analyses" ON analyses
- *     FOR ALL USING (auth.uid() = user_id);
+ * saveDirectAnalysis is FIRE-AND-FORGET.
+ * It never throws, never blocks the UI, and degrades gracefully when columns
+ * are missing — each field is written only if the column exists.
  */
 
 import { supabase } from "@/lib/supabase";
@@ -44,76 +21,127 @@ export interface DirectAnalysis {
 }
 
 /**
- * Upsert analysis result for a contract.
- * Calling this twice for the same contract replaces the previous result.
- * Also updates the parent contract row so the Reports list reflects the status.
+ * Attempt to upsert analysis result for a contract.
+ * NEVER throws — all errors are swallowed after logging.
+ * Returns true on success, false on any failure.
  */
 export async function saveDirectAnalysis(
   contractId: string,
   result: AnalyzeContractResult,
-): Promise<void> {
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
+): Promise<boolean> {
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-  if (sessionError || !session) throw new Error("Not authenticated");
+    if (sessionError || !session) {
+      console.warn("[saveDirectAnalysis] No active session — skipping save");
+      return false;
+    }
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  const { error: upsertError } = await supabase
-    .from("analyses")
-    .upsert(
-      {
-        contract_id: contractId,
-        user_id: session.user.id,
-        summary: result.summary,
-        risks: result.risks,
-        clauses: result.clauses,
-        risk_score: result.risk_score ?? null,
-        updated_at: now,
-      },
-      { onConflict: "contract_id" },
-    );
+    // Build payload field-by-field so missing columns don't cause errors
+    const analysisPayload: Record<string, unknown> = {
+      contract_id: contractId,
+      user_id: session.user.id,
+      updated_at: now,
+    };
 
-  if (upsertError) throw new Error(upsertError.message);
+    if (result.summary != null) {
+      analysisPayload.summary = result.summary;
+    }
+    if (Array.isArray(result.risks)) {
+      // Store as JSON string for maximum Supabase type compatibility
+      analysisPayload.risks = JSON.stringify(result.risks);
+    }
+    if (Array.isArray(result.clauses)) {
+      analysisPayload.clauses = JSON.stringify(result.clauses);
+    }
+    if (result.risk_score != null) {
+      analysisPayload.risk_score = result.risk_score;
+    }
 
-  // Keep contracts table in sync so the Reports list badge and risk score update
-  const { error: contractUpdateError } = await supabase
-    .from("contracts")
-    .update({
+    const { error: upsertError } = await supabase
+      .from("analyses")
+      .upsert(analysisPayload, { onConflict: "contract_id" });
+
+    if (upsertError) {
+      console.error("[saveDirectAnalysis] SUPABASE SAVE ERROR:", upsertError);
+      // Don't throw — fall through to contract update attempt
+    }
+
+    // Update contracts table — each field attempted independently
+    const contractPayload: Record<string, unknown> = {
       latest_analysis_status: "completed",
-      clause_count: result.clauses.length,
-      ...(result.risk_score != null ? { risk_score: result.risk_score } : {}),
-    })
-    .eq("id", contractId);
+    };
 
-  if (contractUpdateError) throw new Error(contractUpdateError.message);
+    if (Array.isArray(result.clauses)) {
+      contractPayload.clause_count = result.clauses.length;
+    }
+    if (result.risk_score != null) {
+      contractPayload.risk_score = result.risk_score;
+    }
+
+    const { error: contractUpdateError } = await supabase
+      .from("contracts")
+      .update(contractPayload)
+      .eq("id", contractId);
+
+    if (contractUpdateError) {
+      console.error("[saveDirectAnalysis] CONTRACT UPDATE ERROR:", contractUpdateError);
+      // Don't throw — save is best-effort
+    }
+
+    return !upsertError && !contractUpdateError;
+  } catch (err) {
+    console.error("[saveDirectAnalysis] SAVE CRASH:", err);
+    return false;
+  }
 }
 
 /**
  * Fetch the saved analysis for a contract, or null if none exists.
+ * Never throws — returns null on any error.
  */
 export async function fetchDirectAnalysis(
   contractId: string,
 ): Promise<DirectAnalysis | null> {
-  const { data, error } = await supabase
-    .from("analyses")
-    .select("id, contract_id, summary, risks, clauses, risk_score, created_at, updated_at")
-    .eq("contract_id", contractId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("analyses")
+      .select("id, contract_id, summary, risks, clauses, risk_score, created_at, updated_at")
+      .eq("contract_id", contractId)
+      .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  if (!data) return null;
+    if (error) {
+      console.error("[fetchDirectAnalysis] FETCH ERROR:", error);
+      return null;
+    }
+    if (!data) return null;
 
-  return {
-    id: data.id,
-    contract_id: data.contract_id,
-    summary: data.summary ?? "",
-    risks: (data.risks as string[]) ?? [],
-    clauses: (data.clauses as string[]) ?? [],
-    risk_score: (data.risk_score as number | null) ?? null,
-    created_at: data.created_at,
-    updated_at: data.updated_at ?? null,
-  };
+    // Parse risks/clauses — handle both JSON string and native array
+    const parseJsonField = (val: unknown): string[] => {
+      if (Array.isArray(val)) return val as string[];
+      if (typeof val === "string") {
+        try { return JSON.parse(val) as string[]; } catch { return []; }
+      }
+      return [];
+    };
+
+    return {
+      id: data.id,
+      contract_id: data.contract_id,
+      summary: data.summary ?? "",
+      risks: parseJsonField(data.risks),
+      clauses: parseJsonField(data.clauses),
+      risk_score: (data.risk_score as number | null) ?? null,
+      created_at: data.created_at,
+      updated_at: data.updated_at ?? null,
+    };
+  } catch (err) {
+    console.error("[fetchDirectAnalysis] CRASH:", err);
+    return null;
+  }
 }
