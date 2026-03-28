@@ -14,130 +14,135 @@ const lastRequestAt = new Map<string, number>();
 const RATE_LIMIT_MS = 5_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
-  // ── Config check ─────────────────────────────────────────────────────────────
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-    console.error("[analyze] Missing required env vars");
-    return res.status(500).json({ error: "Server configuration error" });
-  }
-
-  // ── Auth validation ──────────────────────────────────────────────────────────
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-  if (!token) {
-    return res.status(401).json({ error: "Missing authorization token" });
-  }
-
-  const anonClient = createClient(supabaseUrl, supabaseAnonKey);
-  const {
-    data: { user },
-    error: authError,
-  } = await anonClient.auth.getUser(token);
-
-  if (authError || !user) {
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-
-  // ── Rate limiting ─────────────────────────────────────────────────────────────
-  const now = Date.now();
-  const last = lastRequestAt.get(user.id) ?? 0;
-  if (now - last < RATE_LIMIT_MS) {
-    return res.status(429).json({ error: "Too many requests. Please wait before analyzing again." });
-  }
-  lastRequestAt.set(user.id, now);
-
-  // ── Input validation ─────────────────────────────────────────────────────────
-  const { contract_id, include_redlines = false } = req.body || {};
-  const includeRedlines: boolean = include_redlines === true;
-
-  console.log("Analyze request:", { contract_id, include_redlines: includeRedlines });
-
-  if (!contract_id) {
-    return res.status(400).json({ error: "Missing contract_id" });
-  }
-
-  // ── Fetch contract (ownership enforced via user_id filter) ───────────────────
-  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-
-  const { data: contract, error: contractError } = await serviceClient
-    .from("contracts")
-    .select("file_url, filename")
-    .eq("id", contract_id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (contractError || !contract) {
-    return res.status(404).json({ error: "Contract not found" });
-  }
-
-  // ── File type guard ───────────────────────────────────────────────────────────
-  const filePath: string = contract.file_url ?? "";
-  if (!filePath.toLowerCase().endsWith(".pdf")) {
-    return res.status(400).json({ error: "Invalid file type. Only PDF allowed." });
-  }
-
-  // ── Download file from Supabase Storage ──────────────────────────────────────
-  const { data: fileBlob, error: downloadError } = await serviceClient.storage
-    .from("contracts")
-    .download(contract.file_url);
-
-  if (downloadError || !fileBlob) {
-    console.error("[analyze] Storage download failed:", downloadError?.message);
-    return res.status(502).json({ error: "Could not retrieve contract file" });
-  }
-
-  if (fileBlob.size === 0) {
-    return res.status(422).json({ error: "File is empty. Cannot analyze." });
-  }
-
-  // ── Extract PDF text ─────────────────────────────────────────────────────────
-  let extractedText: string;
   try {
-    const pdfModule = await import("pdf-parse");
-    const pdfParse = (pdfModule as any).default || pdfModule;
-    const arrayBuffer = await fileBlob.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const parsed = await pdfParse(buffer);
-    extractedText = parsed.text?.trim() ?? "";
-  } catch (err: unknown) {
-    const reason = err instanceof Error ? err.message : "Unknown parse error";
-    console.error("[analyze] pdf-parse failed:", reason);
-    return res.status(422).json({
-      error: "Failed to analyze contract",
-      reason,
-    });
-  }
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method Not Allowed" });
+    }
 
-  if (!extractedText) {
-    return res.status(422).json({
-      error: "Failed to analyze contract",
-      reason: "PDF contains no extractable text — it may be a scanned image.",
-    });
-  }
+    // ── Config check ───────────────────────────────────────────────────────────
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      console.error("[analyze] Missing required env vars");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
 
-  // Trim to token budget
-  const trimmedText =
-    extractedText.length > MAX_TEXT_CHARS
+    // ── Auth validation ────────────────────────────────────────────────────────
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    if (!token) {
+      return res.status(401).json({ error: "Missing authorization token" });
+    }
+
+    const anonClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    // ── Rate limiting ──────────────────────────────────────────────────────────
+    const now = Date.now();
+    const last = lastRequestAt.get(user.id) ?? 0;
+    if (now - last < RATE_LIMIT_MS) {
+      return res.status(429).json({ error: "Too many requests. Please wait before analyzing again." });
+    }
+    lastRequestAt.set(user.id, now);
+
+    // ── Input validation ───────────────────────────────────────────────────────
+    console.log("REQ BODY:", req.body);
+
+    const body = req.body || {};
+    const contract_id = body.contract_id;
+    const include_redlines = body.include_redlines === true;
+
+    console.log("Analyze request:", { contract_id, include_redlines });
+
+    if (!contract_id || typeof contract_id !== "string") {
+      return res.status(400).json({ error: "Invalid contract_id" });
+    }
+
+    // ── Fetch contract ─────────────────────────────────────────────────────────
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: contract, error: contractError } = await serviceClient
+      .from("contracts")
+      .select("file_url, filename")
+      .eq("id", contract_id)
+      .eq("user_id", user.id)
+      .single();
+
+    console.log("[analyze] Contract lookup:", { found: !!contract, error: contractError?.message });
+
+    if (!contract) {
+      return res.status(404).json({ error: "Contract not found" });
+    }
+
+    // ── File type guard ────────────────────────────────────────────────────────
+    const filePath: string = contract.file_url ?? "";
+    if (!filePath.toLowerCase().endsWith(".pdf")) {
+      return res.status(400).json({ error: "Invalid file type. Only PDF allowed." });
+    }
+
+    // ── Download file ──────────────────────────────────────────────────────────
+    const { data: fileBlob, error: downloadError } = await serviceClient.storage
+      .from("contracts")
+      .download(contract.file_url);
+
+    console.log("[analyze] Download:", { size: fileBlob?.size, error: downloadError?.message });
+
+    if (downloadError || !fileBlob) {
+      return res.status(502).json({ error: "Could not retrieve contract file" });
+    }
+
+    if (fileBlob.size === 0) {
+      return res.status(422).json({ error: "File is empty. Cannot analyze." });
+    }
+
+    // ── Extract PDF text ───────────────────────────────────────────────────────
+    let extractedText: string;
+    try {
+      const pdfModule = await import("pdf-parse");
+      const pdfParse = (pdfModule as any).default || pdfModule;
+      const arrayBuffer = await fileBlob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      console.log("[analyze] Parsing PDF, buffer size:", buffer.length);
+      const parsed = await pdfParse(buffer);
+      extractedText = parsed.text?.trim() ?? "";
+      console.log("[analyze] Extracted text length:", extractedText.length);
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.message : "Unknown parse error";
+      console.error("[analyze] pdf-parse failed:", reason);
+      return res.status(422).json({ error: "Failed to parse PDF", reason });
+    }
+
+    if (!extractedText || extractedText.length < 20) {
+      return res.status(422).json({ error: "Empty or invalid PDF content" });
+    }
+
+    // ── Trim to token budget ───────────────────────────────────────────────────
+    const trimmedText = extractedText.length > MAX_TEXT_CHARS
       ? extractedText.slice(0, MAX_TEXT_CHARS)
       : extractedText;
 
-  const wasTrimmed = extractedText.length > MAX_TEXT_CHARS;
+    const wasTrimmed = extractedText.length > MAX_TEXT_CHARS;
 
-  // ── Return extracted text (LLM call wired up in next step) ───────────────────
-  return res.status(200).json({
-    contract_id,
-    filename: contract.filename ?? contract.file_url,
-    extracted_text: trimmedText,
-    char_count: trimmedText.length,
-    was_trimmed: wasTrimmed,
-    include_redlines: includeRedlines,
-    summary: null,
-    risks: [] as string[],
-    clauses: [] as string[],
-    risk_score: null,
-  });
+    // ── Response ───────────────────────────────────────────────────────────────
+    return res.status(200).json({
+      contract_id,
+      filename: contract.filename ?? contract.file_url,
+      extracted_text: trimmedText,
+      char_count: trimmedText.length,
+      was_trimmed: wasTrimmed,
+      include_redlines,
+      summary: null,
+      risks: [] as string[],
+      clauses: [] as string[],
+      risk_score: null,
+    });
+
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : "unknown";
+    console.error("ANALYZE ERROR:", err);
+    return res.status(500).json({ error: "Analysis failed", reason });
+  }
 }

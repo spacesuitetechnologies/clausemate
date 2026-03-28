@@ -346,7 +346,7 @@ export async function analyzeContract(
     credentials: "include",
     body: JSON.stringify({
       contract_id: contractId,
-      include_redlines: includeRedlines === true,
+      include_redlines: !!includeRedlines,
     }),
   });
 
