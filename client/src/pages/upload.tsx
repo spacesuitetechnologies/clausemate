@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
@@ -31,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { demoSteps } from "@/lib/mock-data";
 import * as api from "@/lib/api";
 import { handleUpload } from "@/lib/upload";
+import { saveDirectAnalysis } from "@/lib/analyses";
 import type { AnalysisCost } from "@/lib/credits";
 import type { ClauseResult } from "@/types/analysis";
 import type { AnalyzeContractResult } from "@/lib/api";
@@ -362,6 +364,7 @@ function UploadContent() {
   const { estimateCost, checkAffordability } = useAuth();
   const credits = useCredits();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
   // ── File state ───────────────────────────────────────────────────────────────
@@ -520,6 +523,16 @@ function UploadContent() {
       } else {
         const result = await api.analyzeContract(uploadedContractId);
         if (stepIntervalRef.current) { clearInterval(stepIntervalRef.current); stepIntervalRef.current = null; }
+
+        // Persist to Supabase so results appear in Reports
+        try {
+          await saveDirectAnalysis(uploadedContractId, result);
+          queryClient.invalidateQueries({ queryKey: ["contracts"] });
+          queryClient.invalidateQueries({ queryKey: ["direct-analysis", uploadedContractId] });
+        } catch {
+          // Save failure is non-fatal — results still shown in current session
+        }
+
         setDirectResult(result);
         setPhase("results");
       }

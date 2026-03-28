@@ -1,11 +1,11 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { FileText, Search, Clock, AlertTriangle, Download, Filter, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { FileText, Search, Clock, AlertTriangle, Download, Filter, Loader2, RefreshCw, ExternalLink, ShieldAlert, ListChecks, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { RiskBar } from "@/components/RiskBar";
-import { useContracts, useContractAnalysis } from "@/hooks/use-contracts";
+import { useContracts, useContractAnalysis, useDirectAnalysis } from "@/hooks/use-contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { getSignedUrlById } from "@/lib/contracts";
@@ -34,6 +34,7 @@ function ReportsContent() {
 
   const { data: contracts = [], isLoading: contractsLoading } = useContracts();
   const { data: analysis, isLoading: analysisLoading } = useContractAnalysis(selectedId);
+  const { data: directAnalysis, isLoading: directAnalysisLoading } = useDirectAnalysis(selectedId);
 
   const handleRetry = useCallback(async () => {
     if (!selectedId || !analysis) return;
@@ -195,14 +196,57 @@ function ReportsContent() {
                 <RiskBar score={analysis?.overall_score ?? selected.risk_score ?? 0} />
               </div>
 
-              <div className="space-y-2">
-                <h4 className="text-[12px] font-semibold">Key Findings</h4>
-
-                {analysisLoading ? (
+              <div className="space-y-3">
+                {(analysisLoading || directAnalysisLoading) ? (
                   <div className="py-6 flex items-center justify-center gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="text-[12px]">Loading analysis…</span>
                   </div>
+                ) : directAnalysis ? (
+                  // ── Direct analysis (saved via /api/analyze) ──────────────
+                  <>
+                    {/* Summary */}
+                    <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Summary</p>
+                      <p className="text-[12px] text-foreground/80 leading-relaxed">{directAnalysis.summary}</p>
+                    </div>
+
+                    {/* Risks */}
+                    {directAnalysis.risks.length > 0 && (
+                      <div className="rounded-lg border border-border/60 bg-white p-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Risks</p>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {directAnalysis.risks.map((risk, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full bg-red-100 flex items-center justify-center text-[8px] font-bold text-red-600">!</span>
+                              <span className="text-[12px] text-muted-foreground">{risk}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Clauses */}
+                    {directAnalysis.clauses.length > 0 && (
+                      <div className="rounded-lg border border-border/60 bg-white p-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <ListChecks className="h-3.5 w-3.5 text-primary/70" />
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Key Clauses</p>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {directAnalysis.clauses.map((clause, i) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <Check className="h-3 w-3 text-green-500 shrink-0" />
+                              <span className="text-[12px] text-muted-foreground">{clause}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
                 ) : analysis?.status === "queued" ? (
                   <div className="py-6 flex flex-col items-center gap-2 text-center">
                     <div className="h-8 w-8 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
@@ -261,9 +305,7 @@ function ReportsContent() {
                         <div className="flex items-center gap-2 mb-1">
                           <AlertTriangle className={`h-3 w-3 risk-${riskClass}`} />
                           <span className="text-[12px] font-medium">{cl.title}</span>
-                          <span
-                            className={`ml-auto text-[10px] font-semibold uppercase risk-${riskClass}`}
-                          >
+                          <span className={`ml-auto text-[10px] font-semibold uppercase risk-${riskClass}`}>
                             {cl.risk_level}
                           </span>
                         </div>
