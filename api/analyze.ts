@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import pdfParse from "pdf-parse";
 
 // ── Env vars ─────────────────────────────────────────────────────────────────
 // SUPABASE_ANON_KEY   — used for JWT validation (public, safe in edge functions)
@@ -89,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── Extract PDF text ─────────────────────────────────────────────────────────
   let extractedText: string;
   try {
+    const pdfParse = (await import("pdf-parse")).default;
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
     const parsed = await pdfParse(buffer);
     extractedText = parsed.text?.trim() ?? "";

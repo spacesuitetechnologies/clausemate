@@ -543,20 +543,30 @@ export default function LandingPage() {
       <DisclaimerSection />
 
       <footer className="border-t border-border/50 py-6 px-4 sm:px-6">
-        <div className="max-w-[1140px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <a href="mailto:admin@spacesuite.io" className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-            <Mail className="h-3 w-3" /> admin@spacesuite.io
-          </a>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap justify-center">
-            <Link href="/privacy"><span className="hover:text-foreground cursor-pointer transition-colors">Privacy</span></Link>
-            <span className="text-border/70">·</span>
-            <Link href="/terms"><span className="hover:text-foreground cursor-pointer transition-colors">Terms</span></Link>
-            <span className="text-border/70">·</span>
-            <Link href="/security"><span className="hover:text-foreground cursor-pointer transition-colors">Security</span></Link>
-            <span className="text-border/70">·</span>
-            <span>Made in 🇮🇳 for the world</span>
+        <div className="max-w-[1140px] mx-auto">
+          {/* Mobile: stacked. Desktop: single row with absolute-centered middle */}
+          <div className="flex flex-col gap-2 items-center text-xs text-muted-foreground md:relative md:flex-row md:items-center md:justify-between md:gap-0">
+            {/* LEFT */}
+            <div className="flex items-center gap-4">
+              <a href="mailto:admin@spacesuite.io" className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                <Mail className="h-3 w-3" /> admin@spacesuite.io
+              </a>
+              <span className="text-border/70">·</span>
+              <Link href="/privacy"><span className="hover:text-foreground cursor-pointer transition-colors">Privacy</span></Link>
+              <span className="text-border/70">·</span>
+              <Link href="/terms"><span className="hover:text-foreground cursor-pointer transition-colors">Terms</span></Link>
+              <span className="text-border/70">·</span>
+              <Link href="/security"><span className="hover:text-foreground cursor-pointer transition-colors">Security</span></Link>
+            </div>
+            {/* CENTER */}
+            <div className="md:absolute md:left-1/2 md:-translate-x-1/2">
+              Made in 🇮🇳 for the world
+            </div>
+            {/* RIGHT */}
+            <div className="text-muted-foreground/70">
+              © 2026 Spacesuite Technologies LLP
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground/70">© 2026 Spacesuite Technologies LLP</p>
         </div>
       </footer>
 
