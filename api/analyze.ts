@@ -160,7 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ── Method guard ──────────────────────────────────────────────────────────
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method Not Allowed", ...safeExit("METHOD_ERROR") });
+      return res.status(405).json(safeExit("Method Not Allowed"));
     }
 
     // ── Config check ──────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
     if (!token) {
-      return res.status(401).json({ error: "Missing authorization token", ...safeExit("AUTH_ERROR") });
+      return res.status(401).json(safeExit("Missing authorization token"));
     }
 
     let userId: string;
@@ -182,23 +182,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const anonClient = createClient(supabaseUrl, supabaseAnonKey);
       const { data, error: authError } = await anonClient.auth.getUser(token);
       if (authError || !data?.user) {
-        return res.status(401).json({ error: "Invalid or expired token", ...safeExit("AUTH_ERROR") });
+        return res.status(401).json(safeExit("Invalid or expired token"));
       }
       userId = data.user.id;
     } catch (authEx: unknown) {
       const msg = authEx instanceof Error ? authEx.message : "Auth exception";
       console.error("[analyze] Auth exception:", msg);
-      return res.status(401).json({ error: "Auth failed", ...safeExit("AUTH_ERROR") });
+      return res.status(401).json(safeExit("Auth failed"));
     }
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
     const now = Date.now();
     const last = lastRequestAt.get(userId) ?? 0;
     if (now - last < RATE_LIMIT_MS) {
-      return res.status(429).json({
-        error: "Too many requests. Please wait before analyzing again.",
-        ...safeExit("RATE_LIMIT"),
-      });
+      return res.status(429).json(safeExit("Too many requests. Please wait before analyzing again."));
     }
     lastRequestAt.set(userId, now);
 
@@ -208,7 +205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const include_redlines = body.include_redlines === true;
 
     if (!contract_id || typeof contract_id !== "string") {
-      return res.status(400).json({ error: "contract_id is required and must be a string", ...safeExit("VALIDATION_ERROR") });
+      return res.status(400).json(safeExit("contract_id is required and must be a string"));
     }
 
     // ── Fetch contract (ownership enforced via user_id) ───────────────────────
@@ -224,7 +221,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (contractError || !data) {
         console.error("[analyze] Contract lookup failed:", contractError?.message);
-        return res.status(404).json({ error: "Contract not found", ...safeExit("NOT_FOUND") });
+        return res.status(404).json(safeExit("Contract not found"));
       }
       contract = data as { file_url: string; filename: string };
     } catch (dbEx: unknown) {
