@@ -14,129 +14,172 @@ const MAX_TEXT_CHARS = 40_000;
 const lastRequestAt = new Map<string, number>();
 const RATE_LIMIT_MS = 5_000;
 
-// ── Graceful parse-failed response shape ──────────────────────────────────────
-function parseFailed(reason: string) {
+// ── Safe fallback response — always valid shape ───────────────────────────────
+function safeExit(error: string, detail?: string) {
   return {
-    summary: "Could not extract text from PDF. File may be scanned or invalid.",
+    summary: "Could not process file.",
     risks: [] as string[],
     clauses: [] as string[],
-    risk_score: null,
-    error: "PARSE_FAILED",
-    parse_fail_reason: reason,
+    risk_score: null as number | null,
+    error,
+    parse_fail_reason: detail ?? error,
   };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    console.log("STEP: handler start");
+    console.log("BODY:", req.body);
+
     // ── Method guard ──────────────────────────────────────────────────────────
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method Not Allowed" });
+      return res.status(405).json({ error: "Method Not Allowed", summary: "", risks: [], clauses: [] });
     }
 
     // ── Config check ──────────────────────────────────────────────────────────
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-      console.error("[analyze] Missing required env vars (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY)");
-      return res.status(500).json({ error: "Server configuration error" });
+      console.error("[analyze] Missing env vars: SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY");
+      return res.status(200).json(safeExit("CONFIG_ERROR", "Server misconfigured"));
     }
 
     // ── Auth validation ───────────────────────────────────────────────────────
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    console.log("STEP: auth check");
+    const authHeader = req.headers?.authorization ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
     if (!token) {
-      return res.status(401).json({ error: "Missing authorization token" });
+      return res.status(401).json({ error: "Missing authorization token", summary: "", risks: [], clauses: [] });
     }
 
-    const anonClient = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
-
-    if (authError || !user) {
-      return res.status(401).json({ error: "Invalid or expired token" });
+    let user: { id: string } | null = null;
+    try {
+      const anonClient = createClient(supabaseUrl, supabaseAnonKey);
+      const { data, error: authError } = await anonClient.auth.getUser(token);
+      if (authError || !data?.user) {
+        return res.status(401).json({ error: "Invalid or expired token", summary: "", risks: [], clauses: [] });
+      }
+      user = data.user;
+    } catch (authEx: unknown) {
+      const msg = authEx instanceof Error ? authEx.message : "Auth exception";
+      console.error("[analyze] Auth exception:", msg);
+      return res.status(401).json({ error: "Auth failed", summary: "", risks: [], clauses: [] });
     }
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
     const now = Date.now();
     const last = lastRequestAt.get(user.id) ?? 0;
     if (now - last < RATE_LIMIT_MS) {
-      return res.status(429).json({ error: "Too many requests. Please wait before analyzing again." });
+      return res.status(429).json({ error: "Too many requests. Please wait before analyzing again.", summary: "", risks: [], clauses: [] });
     }
     lastRequestAt.set(user.id, now);
 
     // ── Input validation ──────────────────────────────────────────────────────
-    console.log("REQ BODY:", req.body);
-
-    const body = req.body || {};
+    console.log("STEP: input validation");
+    const body = req.body ?? {};
     const contract_id: unknown = body.contract_id;
     const include_redlines: boolean = body.include_redlines === true;
 
     console.log("Analyze request:", { contract_id, include_redlines });
 
     if (!contract_id || typeof contract_id !== "string") {
-      return res.status(400).json({ error: "Invalid contract_id" });
+      return res.status(400).json({ error: "Invalid contract_id", summary: "", risks: [], clauses: [] });
     }
 
     // ── Fetch contract (ownership enforced via user_id) ───────────────────────
-    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    console.log("STEP: fetch contract", contract_id);
+    let contract: { file_url: string; filename: string } | null = null;
+    try {
+      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+      const { data, error: contractError } = await serviceClient
+        .from("contracts")
+        .select("file_url, filename")
+        .eq("id", contract_id)
+        .eq("user_id", user.id)
+        .single();
 
-    const { data: contract, error: contractError } = await serviceClient
-      .from("contracts")
-      .select("file_url, filename")
-      .eq("id", contract_id)
-      .eq("user_id", user.id)
-      .single();
+      console.log("[analyze] Contract lookup:", { found: !!data, error: contractError?.message });
 
-    console.log("[analyze] Contract lookup:", { found: !!contract, error: contractError?.message });
-
-    if (!contract) {
-      return res.status(404).json({ error: "Contract not found" });
+      if (contractError || !data) {
+        return res.status(404).json({ error: "Contract not found", summary: "", risks: [], clauses: [] });
+      }
+      contract = data;
+    } catch (dbEx: unknown) {
+      const msg = dbEx instanceof Error ? dbEx.message : "DB exception";
+      console.error("[analyze] Contract fetch exception:", msg);
+      return res.status(200).json(safeExit("DB_ERROR", msg));
     }
 
     // ── File type guard ───────────────────────────────────────────────────────
     const filePath: string = contract.file_url ?? "";
     if (!filePath.toLowerCase().endsWith(".pdf")) {
-      return res.status(400).json({ error: "Invalid file type. Only PDF allowed." });
+      return res.status(400).json({ error: "Invalid file type. Only PDF allowed.", summary: "", risks: [], clauses: [] });
     }
 
     // ── Download file from Supabase Storage ───────────────────────────────────
-    const { data: fileBlob, error: downloadError } = await serviceClient.storage
-      .from("contracts")
-      .download(contract.file_url);
+    console.log("STEP: download file", filePath);
+    let fileBlob: Blob | null = null;
+    try {
+      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+      const { data, error: downloadError } = await serviceClient.storage
+        .from("contracts")
+        .download(contract.file_url);
 
-    console.log("[analyze] Download:", { size: fileBlob?.size, error: downloadError?.message });
+      console.log("[analyze] Download:", { size: data?.size, error: downloadError?.message });
 
-    if (downloadError || !fileBlob) {
-      return res.status(502).json({ error: "Could not retrieve contract file" });
+      if (downloadError || !data) {
+        console.error("[analyze] Download failed:", downloadError?.message);
+        return res.status(200).json(safeExit("DOWNLOAD_ERROR", downloadError?.message ?? "Could not retrieve file"));
+      }
+      fileBlob = data;
+    } catch (dlEx: unknown) {
+      const msg = dlEx instanceof Error ? dlEx.message : "Download exception";
+      console.error("[analyze] Download exception:", msg);
+      return res.status(200).json(safeExit("DOWNLOAD_ERROR", msg));
     }
 
-    // Empty file — treat as parse failure, not a hard error
+    console.log("FILE SIZE:", fileBlob?.size);
+
+    if (!fileBlob) {
+      return res.status(200).json(safeExit("DOWNLOAD_ERROR", "File blob is null"));
+    }
+
     if (fileBlob.size === 0) {
       console.warn("[analyze] File is empty:", contract_id);
-      return res.status(200).json(parseFailed("File is empty"));
+      return res.status(200).json(safeExit("PARSE_FAILED", "File is empty"));
     }
 
     // ── Extract PDF text ──────────────────────────────────────────────────────
+    console.log("STEP: parse PDF");
     let extractedText = "";
-    let parser: InstanceType<typeof PDFParse> | null = null;
     try {
       const arrayBuffer = await fileBlob.arrayBuffer();
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        console.warn("[analyze] arrayBuffer empty");
+        return res.status(200).json(safeExit("PARSE_FAILED", "File buffer is empty"));
+      }
       const buffer = Buffer.from(arrayBuffer);
       console.log("[analyze] Parsing PDF, buffer size:", buffer.length);
 
-      parser = new PDFParse({ data: buffer });
-      const parsed = await parser.getText();
-      extractedText = parsed.text?.trim() ?? "";
-      console.log("[analyze] Extracted text length:", extractedText.length);
-    } catch (err: unknown) {
-      const reason = err instanceof Error ? err.message : "Unknown parse error";
+      let parser: InstanceType<typeof PDFParse> | null = null;
+      try {
+        parser = new PDFParse({ data: buffer });
+        const parsed = await parser.getText();
+        extractedText = parsed?.text?.trim() ?? "";
+        console.log("TEXT LENGTH:", extractedText.length);
+      } finally {
+        if (parser) {
+          try { await parser.destroy(); } catch {}
+        }
+      }
+    } catch (parseEx: unknown) {
+      const reason = parseEx instanceof Error ? parseEx.message : "Unknown parse error";
       console.error("[analyze] pdf-parse failed:", reason);
-    } finally {
-      if (parser) await parser.destroy().catch(() => {});
+      return res.status(200).json(safeExit("PARSE_FAILED", reason));
     }
 
-    // Scanned or unreadable PDF — return graceful response, never error
     if (!extractedText) {
       console.warn("[analyze] No text extracted from PDF:", contract_id);
-      return res.status(200).json(parseFailed("No extractable text — may be a scanned image"));
+      return res.status(200).json(safeExit("PARSE_FAILED", "No extractable text — may be a scanned image"));
     }
 
     // ── Trim to token budget ──────────────────────────────────────────────────
@@ -156,14 +199,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── TODO: AI_ANALYSIS_HOOK ────────────────────────────────────────────────
     // Replace the stub below with a real LLM call.
     // Inputs available:
-    //   trimmedText    — full PDF text, trimmed to MAX_TEXT_CHARS
+    //   trimmedText      — full PDF text, trimmed to MAX_TEXT_CHARS
     //   include_redlines — boolean, whether user wants redline suggestions
-    //   contract_id    — UUID of the contract
+    //   contract_id      — UUID of the contract
     // Expected output shape:
     //   { summary: string, risks: string[], clauses: string[], risk_score: number }
     // ─────────────────────────────────────────────────────────────────────────
     const analysisResult = {
-      summary: null as string | null,
+      summary: "" as string,
       risks: [] as string[],
       clauses: [] as string[],
       risk_score: null as number | null,
@@ -172,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Response ──────────────────────────────────────────────────────────────
     return res.status(200).json({
       contract_id,
-      filename: contract.filename ?? contract.file_url,
+      filename: contract.filename ?? contract.file_url ?? "",
       extracted_text: trimmedText,
       char_count: trimmedText.length,
       was_trimmed: wasTrimmed,
@@ -181,8 +224,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (err: unknown) {
-    const reason = err instanceof Error ? err.message : "unknown";
-    console.error("ANALYZE ERROR:", err);
-    return res.status(500).json({ error: "Analysis failed", reason });
+    const reason = err instanceof Error ? err.message : "UNKNOWN_ERROR";
+    console.error("FATAL ANALYZE ERROR:", err);
+    return res.status(200).json({
+      summary: "Analysis failed due to internal error.",
+      risks: [],
+      clauses: [],
+      risk_score: null,
+      error: reason,
+    });
   }
 }
