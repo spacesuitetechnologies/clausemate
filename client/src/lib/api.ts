@@ -294,7 +294,7 @@ export async function startAnalysis(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ file_id: contractId, include_redlines: includeRedlines }),
+    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines }),
   });
   if (res.status === 402) {
     const body = await res.json().catch(() => ({}));

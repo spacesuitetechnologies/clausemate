@@ -24,7 +24,7 @@ interface AuthContextType {
   isInitializing: boolean;
   authError: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
   logout: () => Promise<void>;
 
   // Credits
@@ -79,10 +79,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Restore session on mount, then listen for auth state changes.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(sessionToUser(session));
-      setIsInitializing(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setUser(sessionToUser(session));
+      })
+      .catch(() => {
+        // Session could not be retrieved — treat as unauthenticated
+      })
+      .finally(() => {
+        setIsInitializing(false);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -123,8 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthLoading(true);
     setAuthError(null);
     try {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
+      return { needsConfirmation: data.session === null };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Sign up failed. Please try again.";
       setAuthError(message);
