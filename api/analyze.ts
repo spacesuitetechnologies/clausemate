@@ -88,7 +88,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── Extract PDF text ─────────────────────────────────────────────────────────
   let extractedText: string;
   try {
-    const pdfParse = (await import("pdf-parse")).default;
+    const pdfModule = await import("pdf-parse");
+    const pdfParse = (pdfModule as any).default || pdfModule;
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
     const parsed = await pdfParse(buffer);
     extractedText = parsed.text?.trim() ?? "";
