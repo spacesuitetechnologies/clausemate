@@ -545,8 +545,8 @@ function UploadContent() {
         queryClient.invalidateQueries({ queryKey: ["direct-analysis", targetContractId] });
         setDirectResult(result);
         setPhase("results");
-        if ((result as any).error === "PARSE_FAILED") {
-          toast({ title: "Could not read PDF", description: result.summary, variant: "destructive" });
+        if (result.error === "PARSE_FAILED") {
+          toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
         } else {
           toast({ title: "Re-analysis complete", description: "Your contract has been re-analyzed." });
         }
@@ -601,8 +601,8 @@ function UploadContent() {
         queryClient.invalidateQueries({ queryKey: ["direct-analysis", uploadedContractId] });
         setDirectResult(result);
         setPhase("results");
-        if ((result as any).error === "PARSE_FAILED") {
-          toast({ title: "Could not read PDF", description: result.summary, variant: "destructive" });
+        if (result.error === "PARSE_FAILED") {
+          toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
         } else {
           toast({ title: "Analysis complete", description: "Your contract has been analyzed." });
         }

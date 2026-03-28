@@ -316,10 +316,12 @@ export async function startAnalysis(
 // ── Direct analysis (mock server endpoint) ────────────────────────────────────
 
 export interface AnalyzeContractResult {
-  summary: string;
+  summary: string | null;
   risks: string[];
   clauses: string[];
-  risk_score?: number;
+  risk_score?: number | null;
+  error?: string;
+  parse_fail_reason?: string;
 }
 
 export async function analyzeContract(
