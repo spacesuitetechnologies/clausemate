@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
 
 // ── Env vars ─────────────────────────────────────────────────────────────────
 const supabaseUrl = process.env.SUPABASE_URL ?? "";
@@ -101,8 +106,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Extract PDF text ───────────────────────────────────────────────────────
     let extractedText: string;
     try {
-      const pdfModule = await import("pdf-parse");
-      const pdfParse = (pdfModule as any).default || pdfModule;
       const arrayBuffer = await fileBlob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       console.log("[analyze] Parsing PDF, buffer size:", buffer.length);
@@ -115,8 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(422).json({ error: "Failed to parse PDF", reason });
     }
 
-    if (!extractedText || extractedText.length < 20) {
-      return res.status(422).json({ error: "Empty or invalid PDF content" });
+    if (!extractedText) {
+      return res.status(422).json({ error: "PDF contains no extractable text. It may be a scanned image." });
     }
 
     // ── Trim to token budget ───────────────────────────────────────────────────
