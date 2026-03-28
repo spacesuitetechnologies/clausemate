@@ -533,20 +533,19 @@ function UploadContent() {
         setAnalysisId(result.analysis_id);
       } else {
         const result = await api.analyzeContract(targetContractId, includeRedlines);
-        try {
-          await saveDirectAnalysis(targetContractId, result);
-        } catch (saveErr) {
+        saveDirectAnalysis(targetContractId, result).catch((saveErr: unknown) => {
           const msg = saveErr instanceof Error ? saveErr.message : "Could not save results";
+          console.warn("[upload] saveDirectAnalysis failed (non-fatal):", msg);
           toast({ title: "Analysis completed but could not be saved", description: msg, variant: "destructive" });
-          setPhase("upload");
-          return;
-        }
+        });
         queryClient.invalidateQueries({ queryKey: ["contracts"] });
         queryClient.invalidateQueries({ queryKey: ["direct-analysis", targetContractId] });
         setDirectResult(result);
         setPhase("results");
         if (result.error === "PARSE_FAILED") {
           toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
+        } else if (result.error) {
+          toast({ title: "Analysis error", description: result.parse_fail_reason ?? result.error, variant: "destructive" });
         } else {
           toast({ title: "Re-analysis complete", description: "Your contract has been re-analyzed." });
         }
@@ -589,20 +588,20 @@ function UploadContent() {
       } else {
         setCurrentStep(2);
         const result = await api.analyzeContract(uploadedContractId, includeRedlines);
-        try {
-          await saveDirectAnalysis(uploadedContractId, result);
-        } catch (saveErr) {
+        // Save to Supabase in the background — a save failure must not hide results from the user
+        saveDirectAnalysis(uploadedContractId, result).catch((saveErr: unknown) => {
           const msg = saveErr instanceof Error ? saveErr.message : "Could not save results";
+          console.warn("[upload] saveDirectAnalysis failed (non-fatal):", msg);
           toast({ title: "Analysis completed but could not be saved", description: msg, variant: "destructive" });
-          setPhase("upload");
-          return;
-        }
+        });
         queryClient.invalidateQueries({ queryKey: ["contracts"] });
         queryClient.invalidateQueries({ queryKey: ["direct-analysis", uploadedContractId] });
         setDirectResult(result);
         setPhase("results");
         if (result.error === "PARSE_FAILED") {
           toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
+        } else if (result.error) {
+          toast({ title: "Analysis error", description: result.parse_fail_reason ?? result.error, variant: "destructive" });
         } else {
           toast({ title: "Analysis complete", description: "Your contract has been analyzed." });
         }

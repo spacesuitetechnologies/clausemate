@@ -20,7 +20,7 @@ const router = Router();
 /* ── POST /analyze ────────────────────────────────── */
 
 const analyzeSchema = z.object({
-  file_id: z.string().uuid("Invalid file ID"),
+  contract_id: z.string().uuid("Invalid contract ID"),
   include_redlines: z.boolean().optional().default(false),
 });
 
@@ -32,7 +32,7 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.userId!;
-      const { file_id, include_redlines } = req.body;
+      const { contract_id, include_redlines } = req.body;
 
       // ── Email verification gate ─────────────────────
       // Checked first (cheapest DB query) so unverified users get a clear
@@ -57,7 +57,7 @@ router.post(
         .from(schema.contracts)
         .where(
           and(
-            eq(schema.contracts.id, file_id),
+            eq(schema.contracts.id, contract_id),
             eq(schema.contracts.userId, userId)
           )
         )
