@@ -1,10 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
+import { PDFParse } from "pdf-parse";
 
 // ── Env vars ─────────────────────────────────────────────────────────────────
 const supabaseUrl = process.env.SUPABASE_URL ?? "";
@@ -104,22 +100,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Extract PDF text ───────────────────────────────────────────────────────
-    let extractedText: string;
+    let extractedText = "";
+    let parser: InstanceType<typeof PDFParse> | null = null;
     try {
       const arrayBuffer = await fileBlob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       console.log("[analyze] Parsing PDF, buffer size:", buffer.length);
-      const parsed = await pdfParse(buffer);
-      extractedText = parsed.text?.trim() ?? "";
+
+      parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      extractedText = result.text?.trim() ?? "";
       console.log("[analyze] Extracted text length:", extractedText.length);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : "Unknown parse error";
       console.error("[analyze] pdf-parse failed:", reason);
-      return res.status(422).json({ error: "Failed to parse PDF", reason });
+    } finally {
+      if (parser) {
+        await parser.destroy().catch(() => {});
+      }
     }
 
     if (!extractedText) {
-      return res.status(422).json({ error: "PDF contains no extractable text. It may be a scanned image." });
+      return res.status(200).json({
+        summary: "Could not extract text from PDF. File may be scanned or invalid.",
+        risks: [],
+        clauses: [],
+        risk_score: null,
+        error: "PARSE_FAILED",
+      });
     }
 
     // ── Trim to token budget ───────────────────────────────────────────────────
