@@ -4,6 +4,7 @@
  * saveDirectAnalysis(contractId, result)
  *   → Upserts one row per contract (UNIQUE on contract_id)
  *   → Also marks contracts.latest_analysis_status = 'completed'
+ *   → Writes risk_score to both analyses and contracts tables
  *
  * fetchDirectAnalysis(contractId)
  *   → Returns the saved analysis for a contract, or null
@@ -17,7 +18,9 @@
  *     summary     TEXT,
  *     risks       JSONB DEFAULT '[]',
  *     clauses     JSONB DEFAULT '[]',
+ *     risk_score  NUMERIC,
  *     created_at  TIMESTAMPTZ DEFAULT NOW(),
+ *     updated_at  TIMESTAMPTZ DEFAULT NOW(),
  *     UNIQUE (contract_id)
  *   );
  *
@@ -35,7 +38,9 @@ export interface DirectAnalysis {
   summary: string;
   risks: string[];
   clauses: string[];
+  risk_score: number | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 /**
@@ -54,6 +59,8 @@ export async function saveDirectAnalysis(
 
   if (sessionError || !session) throw new Error("Not authenticated");
 
+  const now = new Date().toISOString();
+
   const { error: upsertError } = await supabase
     .from("analyses")
     .upsert(
@@ -63,20 +70,25 @@ export async function saveDirectAnalysis(
         summary: result.summary,
         risks: result.risks,
         clauses: result.clauses,
+        risk_score: result.risk_score ?? null,
+        updated_at: now,
       },
       { onConflict: "contract_id" },
     );
 
   if (upsertError) throw new Error(upsertError.message);
 
-  // Keep contracts table in sync so the Reports list badge updates
-  await supabase
+  // Keep contracts table in sync so the Reports list badge and risk score update
+  const { error: contractUpdateError } = await supabase
     .from("contracts")
     .update({
       latest_analysis_status: "completed",
       clause_count: result.clauses.length,
+      ...(result.risk_score != null ? { risk_score: result.risk_score } : {}),
     })
     .eq("id", contractId);
+
+  if (contractUpdateError) throw new Error(contractUpdateError.message);
 }
 
 /**
@@ -87,7 +99,7 @@ export async function fetchDirectAnalysis(
 ): Promise<DirectAnalysis | null> {
   const { data, error } = await supabase
     .from("analyses")
-    .select("id, contract_id, summary, risks, clauses, created_at")
+    .select("id, contract_id, summary, risks, clauses, risk_score, created_at, updated_at")
     .eq("contract_id", contractId)
     .maybeSingle();
 
@@ -100,6 +112,8 @@ export async function fetchDirectAnalysis(
     summary: data.summary ?? "",
     risks: (data.risks as string[]) ?? [],
     clauses: (data.clauses as string[]) ?? [],
+    risk_score: (data.risk_score as number | null) ?? null,
     created_at: data.created_at,
+    updated_at: data.updated_at ?? null,
   };
 }

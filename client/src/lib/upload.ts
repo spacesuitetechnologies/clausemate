@@ -11,8 +11,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
+import { USE_MOCK } from "@/lib/api";
 
 export interface UploadResult {
   contract_id: string;

@@ -42,7 +42,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <button className="lg:hidden h-7 w-7 flex items-center justify-center rounded-md hover:bg-accent" onClick={() => setSidebarOpen(false)}><X className="h-4 w-4" /></button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-0.5">
           {navItems.map((item) => {
             const active = location === item.path;
             return (

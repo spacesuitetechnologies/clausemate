@@ -17,9 +17,19 @@
 import type { UserPlan, CreditUsage, AnalysisCost, PlanId } from "./credits";
 import { CREDIT_COSTS, getPlan } from "./credits";
 import type { AnalysisResponse, ContractSummary } from "@/types/analysis";
+import { supabase } from "@/lib/supabase";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const BASE_URL = "/api";
+
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+/** Returns Authorization header for the current Supabase session, or {} if unauthenticated. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return {};
+  return { Authorization: `Bearer ${session.access_token}` };
+}
 
 // ── Central Error Handler ─────────────────────────────────────────────────────
 
@@ -292,7 +302,7 @@ export async function startAnalysis(
 
   const res = await fetch(`${BASE_URL}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
     body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines }),
   });
@@ -309,10 +319,12 @@ export interface AnalyzeContractResult {
   summary: string;
   risks: string[];
   clauses: string[];
+  risk_score?: number;
 }
 
 export async function analyzeContract(
   contractId: string,
+  includeRedlines = false,
 ): Promise<AnalyzeContractResult> {
   if (USE_MOCK) {
     await delay(800);
@@ -320,13 +332,14 @@ export async function analyzeContract(
       summary: "This is a sample contract summary.",
       risks: ["Payment delay risk", "Termination clause unclear"],
       clauses: ["Payment terms", "Liability clause"],
+      risk_score: 62,
     };
   }
   const res = await fetch(`${BASE_URL}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
-    body: JSON.stringify({ contract_id: contractId }),
+    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines }),
   });
   return handleResponse(res);
 }

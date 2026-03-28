@@ -14,6 +14,9 @@ import type { ContractSummary } from "@/types/analysis";
 
 const SIGNED_URL_TTL = 60; // seconds
 
+// Cache signed URLs for 55 s (5 s buffer before Supabase expiry at 60 s)
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+
 // ── Fetch contracts ───────────────────────────────────────────────────────────
 
 export async function fetchUserContracts(): Promise<ContractSummary[]> {
@@ -67,9 +70,14 @@ export async function getSignedUrl(filePath: string): Promise<string> {
 
 /**
  * Look up the file_url for a contract by id, then sign it.
- * Use this when you only have the contract id (typical from the UI).
+ * Results are cached for 55 s to prevent redundant Supabase calls on rapid clicks.
  */
 export async function getSignedUrlById(contractId: string): Promise<string> {
+  const cached = signedUrlCache.get(contractId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.url;
+  }
+
   const { data, error } = await supabase
     .from("contracts")
     .select("file_url")
@@ -80,5 +88,7 @@ export async function getSignedUrlById(contractId: string): Promise<string> {
     throw new Error("Contract not found or missing file path");
   }
 
-  return getSignedUrl(data.file_url);
+  const url = await getSignedUrl(data.file_url);
+  signedUrlCache.set(contractId, { url, expiresAt: Date.now() + 55_000 });
+  return url;
 }

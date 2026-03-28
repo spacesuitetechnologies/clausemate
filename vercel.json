@@ -2,5 +2,10 @@
   "framework": null,
   "installCommand": "npm install",
   "buildCommand": "npm run build:client",
-  "outputDirectory": "dist/public"
+  "outputDirectory": "dist/public",
+  "functions": {
+    "api/analyze.ts": {
+      "maxDuration": 60
+    }
+  }
 }
