@@ -543,10 +543,10 @@ function UploadContent() {
 
   return (
     // Break out of DashboardLayout's padding to fill the full content area
-    <div className="-m-5 md:-m-7 lg:-m-8 flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="-m-5 md:-m-7 lg:-m-8 flex flex-col md:flex-row md:h-[calc(100vh-3.5rem)] overflow-x-hidden">
 
       {/* ── Left panel: Analysis ─────────────────────────────────────────── */}
-      <div className="w-[40%] min-w-[320px] flex flex-col border-r border-border/50 bg-background overflow-y-auto">
+      <div className="w-full md:w-[40%] md:min-w-[320px] flex flex-col border-b md:border-b-0 md:border-r border-border/50 bg-background md:overflow-y-auto">
 
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/95 backdrop-blur-sm">
@@ -834,7 +834,7 @@ function UploadContent() {
       </div>
 
       {/* ── Right panel: Contract viewer ─────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-muted/20">
+      <div className="w-full md:flex-1 flex flex-col overflow-hidden bg-muted/20">
         {/* Viewer header */}
         <div className="flex items-center gap-3 px-5 h-[53px] border-b border-border/40 bg-white/80 backdrop-blur-sm shrink-0">
           <FileText className="h-4 w-4 text-muted-foreground/50 shrink-0" />
@@ -849,7 +849,7 @@ function UploadContent() {
         </div>
 
         {/* Viewer body */}
-        <div className="flex-1 overflow-hidden">
+        <div className="h-[60vh] md:h-auto md:flex-1 overflow-auto">
           <ContractViewer previewUrl={previewUrl} filename={file?.name ?? null} />
         </div>
       </div>

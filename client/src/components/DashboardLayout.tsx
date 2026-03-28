@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "wouter";
 import { LayoutDashboard, Upload, FileText, CreditCard, Settings, LogOut, Menu, X, Coins } from "lucide-react";
@@ -21,6 +21,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const credits = useCredits();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Prevent body scroll when sidebar drawer is open on mobile
+  useEffect(() => {
+    document.body.classList.toggle("overflow-hidden", sidebarOpen);
+    return () => { document.body.classList.remove("overflow-hidden"); };
+  }, [sidebarOpen]);
+
   return (
     <div className="min-h-screen bg-background flex">
       <AnimatePresence>
@@ -36,7 +42,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <button className="lg:hidden h-7 w-7 flex items-center justify-center rounded-md hover:bg-accent" onClick={() => setSidebarOpen(false)}><X className="h-4 w-4" /></button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
           {navItems.map((item) => {
             const active = location === item.path;
             return (
@@ -50,7 +56,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="px-3 pb-4 space-y-2">
+        <div className="shrink-0 px-3 pb-4 space-y-2 border-t border-border/40 pt-3">
           <div className="rounded-lg border border-border/60 bg-card p-3">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">{user?.name?.charAt(0) || "A"}</div>
