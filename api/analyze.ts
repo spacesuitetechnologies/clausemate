@@ -51,13 +51,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   lastRequestAt.set(user.id, now);
 
   // ── Input validation ─────────────────────────────────────────────────────────
-  const body = req.body ?? {};
-  const contract_id: unknown = body.contract_id;
-  const includeRedlines: boolean = body.include_redlines === true;
+  const { contract_id, include_redlines = false } = req.body || {};
+  const includeRedlines: boolean = include_redlines === true;
 
-  console.log("[analyze] Request:", { contract_id, include_redlines: includeRedlines });
+  console.log("Analyze request:", { contract_id, include_redlines: includeRedlines });
 
-  if (!contract_id || typeof contract_id !== "string") {
+  if (!contract_id) {
     return res.status(400).json({ error: "Missing contract_id" });
   }
 

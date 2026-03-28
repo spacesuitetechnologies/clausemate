@@ -324,8 +324,12 @@ export interface AnalyzeContractResult {
 
 export async function analyzeContract(
   contractId: string,
-  includeRedlines = false,
+  includeRedlines: boolean = false,
 ): Promise<AnalyzeContractResult> {
+  if (!contractId) {
+    throw new Error("Missing contractId");
+  }
+
   if (USE_MOCK) {
     await delay(800);
     return {
@@ -335,13 +339,23 @@ export async function analyzeContract(
       risk_score: 62,
     };
   }
+
   const res = await fetch(`${BASE_URL}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
-    body: JSON.stringify({ contract_id: contractId, include_redlines: includeRedlines === true }),
+    body: JSON.stringify({
+      contract_id: contractId,
+      include_redlines: includeRedlines === true,
+    }),
   });
-  return handleResponse(res);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(err.error || "Analyze failed", res.status);
+  }
+
+  return res.json();
 }
 
 export async function getAnalysisResult(analysisId: string): Promise<AnalysisResponse> {
