@@ -225,21 +225,16 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
   const base64 = buffer.toString("base64");
-  console.log("BASE64 LENGTH:", base64.length);
 
-  const content: any[] =
-    mimeType === "application/pdf"
-      ? [
-          { type: "input_text", text: "Extract all readable text from this PDF document." },
-          { type: "input_file", file: { filename: "document.pdf", data: base64 } },
-        ]
-      : [
-          { type: "input_text", text: "Extract all readable text from this image." },
-          { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
-        ];
-
-  console.log("[OCR CONTENT TYPES]", content.map(c => c.type));
-  console.log("[OCR CONTENT LENGTH]", content.length);
+  const content = mimeType === "application/pdf"
+    ? [
+        { type: "input_text", text: "Extract all readable text from this PDF document." },
+        { type: "input_file", file_data: base64 },
+      ]
+    : [
+        { type: "input_text", text: "Extract all readable text from this image." },
+        { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
+      ];
 
   if (!Array.isArray(content) || content.length !== 2) {
     throw new Error("INVALID OCR CONTENT STRUCTURE");
@@ -250,19 +245,13 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     input: [{ role: "user", content }],
   };
 
-  const bodyString = JSON.stringify(requestBody);
-
-  console.log("====== FINAL OCR REQUEST ======");
-  console.log(bodyString);
-  console.log("================================");
-
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: bodyString,
+    body: JSON.stringify(requestBody),
   });
 
   console.log("[AI OCR] status:", response.status);
