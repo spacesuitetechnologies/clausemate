@@ -29,11 +29,28 @@ function safeExit(error: string, detail?: string) {
 
 // ── LLM analysis ──────────────────────────────────────────────────────────────
 
+interface StructuredRisk {
+  level: "low" | "medium" | "high";
+  reason: string;
+}
+
+interface StructuredClauses {
+  termination: string | null;
+  payment: string | null;
+  liability: string | null;
+  [key: string]: string | null;
+}
+
 interface LLMResult {
   summary: string;
   risk_score: number;
-  risks: string[];
-  clauses: string[];
+  risks: string[];           // derived: "[high] reason" — kept for frontend compat
+  clauses: string[];         // derived: clause keys present — kept for frontend compat
+  parties: string[];
+  effective_date: string | null;
+  jurisdiction: string | null;
+  structured_risks: StructuredRisk[];
+  structured_clauses: StructuredClauses;
 }
 
 async function callAnthropic(text: string): Promise<string> {
@@ -81,31 +98,37 @@ async function callOpenAI(text: string): Promise<string> {
 }
 
 function buildPrompt(contractText: string): string {
-  return `You are an expert Indian contract lawyer. Analyze this contract and respond with ONLY a valid JSON object — no markdown, no explanation, just the JSON.
+  return `You are an expert Indian contract lawyer. Analyze this contract and respond with ONLY a valid JSON object — no markdown, no explanation, no extra text outside the JSON.
 
-JSON format:
+Required JSON format:
 {
-  "summary": "2-3 sentence executive summary of what this contract is and key concerns",
-  "risk_score": <integer 0-100, higher means more risk>,
+  "parties": ["Party 1 name", "Party 2 name"],
+  "effective_date": "YYYY-MM-DD or descriptive date string, or null if not found",
+  "jurisdiction": "Governing law / jurisdiction string, or null if not found",
+  "clauses": {
+    "termination": "Summary of termination clause, or null",
+    "payment": "Summary of payment terms, or null",
+    "liability": "Summary of liability clause, or null"
+  },
   "risks": [
-    "Brief description of a significant risk or concern in this contract",
-    ...
+    { "level": "high", "reason": "One-line description of the risk" },
+    { "level": "medium", "reason": "One-line description of the risk" },
+    { "level": "low", "reason": "One-line description of the risk" }
   ],
-  "clauses": [
-    "Clause name (e.g. Payment Terms)",
-    ...
-  ]
+  "summary": "2-3 sentence executive summary of what this contract is and its key concerns"
 }
 
 Rules:
-- Extract 5-12 most important clauses by name only (just the title, no details)
-- List 2-6 genuine risks as short one-line descriptions
-- risk_score should reflect overall legal risk under Indian law
-- Be concise and practical
+- Extract exact data from the contract; do not invent or assume
+- If a field is not found in the contract, return null for that field
+- risks: list 2-6 genuine risks; level must be exactly "low", "medium", or "high"
+- Be concise and practical; apply Indian law perspective
 
 CONTRACT:
 ${contractText}`;
 }
+
+const RISK_LEVEL_SCORE: Record<string, number> = { high: 80, medium: 50, low: 20 };
 
 function parseLLMResponse(raw: string): LLMResult {
   // Strip markdown code fences if present
@@ -118,21 +141,61 @@ function parseLLMResponse(raw: string): LLMResult {
     throw new Error("LLM returned invalid JSON");
   }
 
-  const risks = Array.isArray(parsed.risks)
-    ? (parsed.risks as unknown[]).map(String).filter(Boolean)
+  // ── Structured risks ──────────────────────────────────────────────────────
+  const structuredRisks: StructuredRisk[] = Array.isArray(parsed.risks)
+    ? (parsed.risks as unknown[]).flatMap((r) => {
+        if (typeof r === "object" && r !== null && "reason" in r) {
+          const level = String((r as Record<string, unknown>).level ?? "medium").toLowerCase();
+          const validLevel = (["low", "medium", "high"].includes(level) ? level : "medium") as StructuredRisk["level"];
+          return [{ level: validLevel, reason: String((r as Record<string, unknown>).reason ?? "") }];
+        }
+        // Tolerate legacy plain-string format from model
+        if (typeof r === "string") return [{ level: "medium" as const, reason: r }];
+        return [];
+      }).filter((r) => r.reason)
     : [];
 
-  const clauses = Array.isArray(parsed.clauses)
-    ? (parsed.clauses as unknown[]).map(String).filter(Boolean)
+  // ── Structured clauses ────────────────────────────────────────────────────
+  const rawClauses = (typeof parsed.clauses === "object" && parsed.clauses !== null && !Array.isArray(parsed.clauses))
+    ? parsed.clauses as Record<string, unknown>
+    : {};
+
+  const structuredClauses: StructuredClauses = {
+    termination: rawClauses.termination != null ? String(rawClauses.termination) : null,
+    payment:     rawClauses.payment     != null ? String(rawClauses.payment)     : null,
+    liability:   rawClauses.liability   != null ? String(rawClauses.liability)   : null,
+  };
+
+  // ── Derived flat arrays for frontend compat ───────────────────────────────
+  const risks: string[] = structuredRisks.map((r) => `[${r.level}] ${r.reason}`);
+
+  const clauses: string[] = Object.entries(structuredClauses)
+    .filter(([, v]) => v !== null)
+    .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
+
+  // ── Risk score: average of individual levels, default 50 ─────────────────
+  const risk_score = structuredRisks.length > 0
+    ? Math.round(structuredRisks.reduce((sum, r) => sum + (RISK_LEVEL_SCORE[r.level] ?? 50), 0) / structuredRisks.length)
+    : 50;
+
+  // ── Metadata ──────────────────────────────────────────────────────────────
+  const parties = Array.isArray(parsed.parties)
+    ? (parsed.parties as unknown[]).map(String).filter(Boolean)
     : [];
 
-  const risk_score = Math.min(100, Math.max(0, Math.round(Number(parsed.risk_score ?? 50))));
+  const effective_date = parsed.effective_date != null ? String(parsed.effective_date) : null;
+  const jurisdiction   = parsed.jurisdiction   != null ? String(parsed.jurisdiction)   : null;
 
   return {
     summary: String(parsed.summary ?? "Contract analysis complete."),
     risk_score,
     risks,
     clauses,
+    parties,
+    effective_date,
+    jurisdiction,
+    structured_risks: structuredRisks,
+    structured_clauses: structuredClauses,
   };
 }
 
@@ -257,17 +320,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(safeExit("PARSE_FAILED", "File is empty"));
     }
 
+    // ── Detect file type from filename / storage path ────────────────────────
+    const filePath: string = contract.file_url ?? "";
+    const filename: string = contract.filename ?? "";
+    const ext = (filename.split(".").pop() ?? filePath.split(".").pop() ?? "").toLowerCase();
+    const isPdf  = ext === "pdf"  || filePath.toLowerCase().includes(".pdf");
+    const isDocx = ext === "docx" || filePath.toLowerCase().includes(".docx");
+    const isTxt  = ext === "txt"  || filePath.toLowerCase().includes(".txt");
+    const isImage = ["jpg", "jpeg", "png", "webp", "bmp", "tiff"].includes(ext);
+
+    console.log("[TYPE]:", ext || "unknown");
+
     // ── Extract text from file ────────────────────────────────────────────────
     let extractedText = "";
     try {
       const arrayBuffer = await fileBlob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-
-      const filePath: string = contract.file_url ?? "";
-      const filename: string = contract.filename ?? "";
-      const isPdf =
-        filePath.toLowerCase().includes(".pdf") ||
-        filename.toLowerCase().endsWith(".pdf");
 
       if (isPdf) {
         // ── Primary parser: pdf-parse ─────────────────────────────────────────
@@ -287,7 +355,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log("[analyze] FALLBACK PARSER TRIGGERED");
           try {
             const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
-            // Resolve worker via process.cwd() — Vercel sets cwd to project root
             const pathMod = await import("path");
             const urlMod = await import("url");
             const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
@@ -310,7 +377,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const fallbackText = pages.join("\n").trim();
             console.log("[analyze] pdfjs-dist fallback result length:", fallbackText.length);
-
             if (fallbackText && fallbackText.length > 50) {
               extractedText = fallbackText;
             }
@@ -318,8 +384,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.warn("[analyze] pdfjs-dist fallback failed:", fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
           }
         }
+
+        // ── OCR fallback: pdf → image → tesseract (scanned PDFs) ────────────
+        if (!extractedText || extractedText.length < 50) {
+          console.log("[OCR] triggered");
+          try {
+            const { fromBuffer } = await import("pdf2pic");
+            const convert = fromBuffer(buffer, {
+              density: 150,
+              format: "png",
+              width: 1200,
+              height: 1600,
+            });
+            const page = await convert(1); // first page only
+            if (!page?.base64) throw new Error("pdf2pic returned no image data");
+            const imageBuffer = Buffer.from(page.base64, "base64");
+            const { recognize } = await import("tesseract.js");
+            const { data } = await recognize(imageBuffer, "eng", { logger: () => {} });
+            const ocrText = data.text?.trim() ?? "";
+            console.log("[OCR] length:", ocrText.length);
+            if (ocrText.length > 50) {
+              extractedText = ocrText;
+            }
+          } catch (ocrErr: unknown) {
+            console.warn("[OCR] failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
+          }
+        }
+
+      } else if (isDocx) {
+        // ── DOCX: mammoth ─────────────────────────────────────────────────────
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ buffer });
+        extractedText = result.value?.trim() ?? "";
+        console.log("[analyze] mammoth result length:", extractedText.length);
+
+      } else if (isTxt) {
+        // ── Plain text ────────────────────────────────────────────────────────
+        extractedText = buffer.toString("utf-8").trim();
+        console.log("[analyze] txt result length:", extractedText.length);
+
+      } else if (isImage) {
+        // ── Image: OCR directly ───────────────────────────────────────────────
+        console.log("[OCR] triggered for image");
+        const { recognize } = await import("tesseract.js");
+        const { data } = await recognize(buffer, "eng", { logger: () => {} });
+        extractedText = data.text?.trim() ?? "";
+        console.log("[OCR] length:", extractedText.length);
+
       } else {
-        // Plain text fallback
+        // ── Unknown: best-effort UTF-8 decode ─────────────────────────────────
+        console.warn("[analyze] Unknown file type, attempting UTF-8 decode");
         extractedText = buffer.toString("utf-8").trim();
       }
     } catch (parseEx: unknown) {
@@ -329,17 +443,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Strict text validation — NO TEXT → NO AI CALL ────────────────────────
-    console.log("[analyze] TEXT LENGTH:", extractedText.length);
+    console.log("[TEXT LENGTH]:", extractedText.length);
 
     if (!extractedText || extractedText.length < 50) {
       console.error("[analyze] Insufficient text extracted after all parsers, blocking AI call");
       return res.status(200).json({
-        summary: "Could not extract text from PDF.",
+        summary: "Could not extract text from the document.",
         risks: [] as string[],
         clauses: [] as string[],
         risk_score: 0,
-        error: "PDF_PARSE_FAILED",
-        parse_fail_reason: "No text could be extracted — document may be a scanned image without embedded text",
+        error: "PARSE_FAILED",
+        parse_fail_reason: "No usable text could be extracted — document may be a scanned image without embedded text",
       });
     }
 
@@ -363,10 +477,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("[analyze] Done. risk_score:", result.risk_score, "clauses:", result.clauses.length);
 
     return res.status(200).json({
+      // ── Frontend-compat fields (flat) ──────────────────────────────────────
       summary: result.summary,
       risks: result.risks,
       clauses: result.clauses,
       risk_score: result.risk_score,
+      // ── Structured extraction fields ───────────────────────────────────────
+      parties: result.parties,
+      effective_date: result.effective_date,
+      jurisdiction: result.jurisdiction,
+      structured_risks: result.structured_risks,
+      structured_clauses: result.structured_clauses,
+      // ── Metadata ──────────────────────────────────────────────────────────
       contract_id,
       filename: contract.filename ?? "",
       was_trimmed: extractedText.length > MAX_TEXT_CHARS,
