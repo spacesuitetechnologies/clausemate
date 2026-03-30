@@ -224,21 +224,21 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
 async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
-  const base64 = buffer.toString("base64");
+  const base64 = Buffer.from(buffer).toString("base64");
 
-  const content = mimeType === "application/pdf"
-    ? [
-        { type: "input_text", text: "Extract all readable text from this PDF document." },
-        { type: "input_file", file_data: base64 },
-      ]
-    : [
-        { type: "input_text", text: "Extract all readable text from this image." },
-        { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
-      ];
+  console.log("BASE64 SAMPLE:", base64.slice(0, 50));
+  console.log("BASE64 LENGTH:", base64.length);
 
-  if (!Array.isArray(content) || content.length !== 2) {
-    throw new Error("INVALID OCR CONTENT STRUCTURE");
-  }
+  const content = [
+    {
+      type: "input_text",
+      text: "Extract all readable text from this PDF document.",
+    },
+    {
+      type: "input_file",
+      file_data: base64,
+    },
+  ];
 
   const requestBody = {
     model: "gpt-4o-mini",
