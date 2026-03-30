@@ -217,50 +217,25 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
-// ── PDF → PNG image (first page) via pdfjs-dist + canvas ─────────────────────
-
-async function pdfToImage(buffer: Buffer): Promise<Buffer> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
-  const pathMod  = await import("path");
-  const urlMod   = await import("url");
-  const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
-
-  const pdf      = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), disableFontFace: true, useSystemFonts: false }).promise;
-  const page     = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 2 });
-
-  const { createCanvas } = await import("canvas");
-  const canvas  = createCanvas(viewport.width, viewport.height);
-  const context = canvas.getContext("2d");
-
-  await page.render({ canvasContext: context as any, viewport }).promise;
-  await pdf.destroy();
-
-  return canvas.toBuffer("image/png");
-}
-
-// ── AI OCR — PDF is converted to image first, then sent to OpenAI vision ──────
+// ── AI OCR — send document to OpenAI for text extraction ─────────────────────
+// PDFs sent as input_file; images sent as input_image.
+// No pdfjs, no canvas, no worker — runs cleanly on Vercel.
 
 async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
-  // Convert PDF to PNG before sending — OpenAI vision requires an image, not raw PDF bytes
-  if (mimeType === "application/pdf") {
-    console.log("[OCR] converting PDF to image…");
-    buffer = await pdfToImage(buffer);
-    mimeType = "image/png";
-  }
-
   console.log("[AI OCR] sending request — buffer length:", buffer.length, "mime:", mimeType);
-  console.log("[DEBUG] MIME TYPE:", mimeType);
 
-  const base64 = buffer.toString("base64");
-  console.log("[DEBUG] BASE64 LENGTH:", base64.length);
+  const base64   = buffer.toString("base64");
+  const dataUrl  = `data:${mimeType};base64,${base64}`;
+
+  const fileContent = mimeType === "application/pdf"
+    ? { type: "input_file",  file_data: dataUrl }
+    : { type: "input_image", image_url: dataUrl };
 
   const content = [
-    { type: "input_text",  text: "Extract all readable text from this image." },
-    { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
+    { type: "input_text", text: "Extract all readable text from this document. Return only the raw text." },
+    fileContent,
   ];
 
   const requestBody = {
@@ -284,26 +259,19 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     throw new Error(`AI OCR API error ${response.status}: ${err.slice(0, 300)}`);
   }
 
-  const data = await response.json() as {
-    output_text?: string;
-    output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
-  };
-  console.log("[DEBUG] STATUS:", response.status);
-  console.log("[DEBUG] RAW RESPONSE:", JSON.stringify(data));
+  const data = await response.json();
+  console.log("[AI OCR RAW RESPONSE]", JSON.stringify(data, null, 2));
 
-  const ocrText =
+  const ocrText: string =
     data.output_text ||
-    data.output?.find((o) => o.type === "message")?.content?.find((c) => c.type === "output_text")?.text ||
-    data.output?.[0]?.content?.[0]?.text ||
+    (Array.isArray(data.output)
+      ? data.output.map((o: { content?: Array<{ text?: string }> }) =>
+          Array.isArray(o.content) ? o.content.map((c) => c.text || "").join("") : ""
+        ).join("")
+      : "") ||
     "";
 
-  console.log("[DEBUG] FINAL OCR TEXT:", ocrText?.slice(0, 200));
-  console.log("[DEBUG] FINAL OCR LENGTH:", ocrText?.length);
-
-  // DEBUG: validation disabled — re-enable after diagnosis
-  // if (!ocrText || ocrText.length < 20) {
-  //   throw new Error("AI OCR returned empty text");
-  // }
+  console.log("[AI OCR TEXT LENGTH]", ocrText.length);
 
   return ocrText.trim();
 }
@@ -422,134 +390,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log("[TYPE]:", ext || "unknown");
 
+    // ── Buffer ────────────────────────────────────────────────────────────────
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    console.log("[STEP] buffer size:", buffer.length, "file type:", ext || "unknown");
+
     // ── Extract text from file ────────────────────────────────────────────────
     let extractedText = "";
-    try {
-      const arrayBuffer = await fileBlob.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      console.log("[STEP] buffer size:", buffer.length, "file type:", ext || "unknown");
 
-      if (isPdf) {
-        // ── Primary parser: pdf-parse ─────────────────────────────────────────
+    if (isPdf) {
+      // ── Primary parser: pdf-parse ───────────────────────────────────────────
+      try {
+        const pdfModule = await import("pdf-parse");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pdfParse = (pdfModule as any).default ?? pdfModule;
+        const parsed = await pdfParse(buffer);
+        extractedText = parsed?.text?.trim() ?? "";
+        console.log("[DEBUG] PDF PARSE RESULT LENGTH:", extractedText?.length);
+        console.log("[DEBUG] PDF PARSE RAW:", extractedText?.slice(0, 200));
+      } catch (primaryErr: unknown) {
+        console.warn("[PARSE FAILED] continuing with AI OCR:", primaryErr instanceof Error ? primaryErr.message : primaryErr);
+      }
+
+      // ── AI OCR fallback (scanned / image-only PDFs) ─────────────────────────
+      if (!extractedText || extractedText.length < 50) {
+        console.log("[FORCE OCR] No text from PDF, using AI OCR");
         try {
-          const pdfModule = await import("pdf-parse");
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pdfParse = (pdfModule as any).default ?? pdfModule;
-          const parsed = await pdfParse(buffer);
-          extractedText = parsed?.text?.trim() ?? "";
-          console.log("[DEBUG] PDF PARSE RESULT LENGTH:", extractedText?.length);
-          console.log("[DEBUG] PDF PARSE RAW:", extractedText?.slice(0, 200));
-        } catch (primaryErr: unknown) {
-          console.warn("[analyze] pdf-parse failed:", primaryErr instanceof Error ? primaryErr.message : primaryErr);
-        }
-
-        // ── Fallback parser: pdfjs-dist (richer text extraction) ─────────────
-        if (!extractedText || extractedText.length < 50) {
-          console.log("[analyze] FALLBACK PARSER TRIGGERED");
-          try {
-            const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
-            const pathMod = await import("path");
-            const urlMod = await import("url");
-            const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
-            pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
-
-            const data = new Uint8Array(buffer);
-            const loadingTask = pdfjsLib.getDocument({ data, disableFontFace: true, useSystemFonts: false });
-            const pdf = await loadingTask.promise;
-
-            const pages: string[] = [];
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-              const page = await pdf.getPage(pageNum);
-              const content = await page.getTextContent();
-              const pageText = (content.items as Array<{ str?: string }>)
-                .map((item) => item.str ?? "")
-                .join(" ");
-              pages.push(pageText);
-            }
-            await pdf.destroy();
-
-            const fallbackText = pages.join("\n").trim();
-            console.log("[analyze] pdfjs-dist fallback result length:", fallbackText.length);
-            if (fallbackText && fallbackText.length > 50) {
-              extractedText = fallbackText;
-            }
-          } catch (fallbackErr: unknown) {
-            console.warn("[analyze] pdfjs-dist fallback failed:", fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
+          const ocrText = await aiOCR(buffer, "application/pdf");
+          console.log("[OCR] length:", ocrText.length);
+          if (ocrText && ocrText.length > 20) {
+            extractedText = ocrText;
+          } else {
+            console.warn("[OCR] AI returned empty, continuing anyway");
           }
+        } catch (ocrErr: unknown) {
+          console.warn("[OCR] AI OCR failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
         }
+      }
 
-        // ── AI OCR fallback (scanned / image-only PDFs) ───────────────────
-        console.log("[DEBUG] BEFORE OCR CHECK:", { hasText: !!extractedText, length: extractedText?.length });
-        if (true) { // DEBUG: forced — remove after diagnosis
-          console.log("[OCR] triggered");
-          try {
-            const ocrText = await aiOCR(buffer, "application/pdf");
-            console.log("[OCR] length:", ocrText.length);
-            if (ocrText.length > 50) {
-              extractedText = ocrText;
-            }
-          } catch (ocrErr: unknown) {
-            console.warn("[OCR] failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
-          }
-        }
-
-      } else if (isDocx) {
-        // ── DOCX: mammoth ─────────────────────────────────────────────────────
+    } else if (isDocx) {
+      // ── DOCX: mammoth ────────────────────────────────────────────────────────
+      try {
         const mammoth = await import("mammoth");
         const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value?.trim() ?? "";
         console.log("[analyze] mammoth result length:", extractedText.length);
-
-      } else if (isTxt) {
-        // ── Plain text ────────────────────────────────────────────────────────
-        extractedText = buffer.toString("utf-8").trim();
-        console.log("[analyze] txt result length:", extractedText.length);
-
-      } else if (isImage) {
-        // ── Image: AI OCR directly ────────────────────────────────────────────
-        console.log("[OCR] triggered for image");
-        const imgMime = ["png"].includes(ext) ? "image/png" : "image/jpeg";
-        try {
-          extractedText = await aiOCR(buffer, imgMime as "image/png" | "image/jpeg");
-        } catch (imgOcrErr: unknown) {
-          console.warn("[OCR] image AI OCR failed:", imgOcrErr instanceof Error ? imgOcrErr.message : imgOcrErr);
-        }
-        console.log("[OCR] length:", extractedText.length);
-
-      } else {
-        // ── Unknown: best-effort UTF-8 decode ─────────────────────────────────
-        console.warn("[analyze] Unknown file type, attempting UTF-8 decode");
-        extractedText = buffer.toString("utf-8").trim();
+      } catch (docxErr: unknown) {
+        console.warn("[analyze] mammoth failed:", docxErr instanceof Error ? docxErr.message : docxErr);
       }
-    } catch (parseEx: unknown) {
-      const reason = parseEx instanceof Error ? parseEx.message : "Unknown parse error";
-      console.error("[analyze] Text extraction failed:", reason);
-      return res.status(200).json(safeExit("PARSE_FAILED", reason));
+
+    } else if (isTxt) {
+      // ── Plain text ───────────────────────────────────────────────────────────
+      extractedText = buffer.toString("utf-8").trim();
+      console.log("[analyze] txt result length:", extractedText.length);
+
+    } else if (isImage) {
+      // ── Image: AI OCR directly ───────────────────────────────────────────────
+      console.log("[OCR] triggered for image");
+      const imgMime = ext === "png" ? "image/png" : "image/jpeg";
+      try {
+        extractedText = await aiOCR(buffer, imgMime as "image/png" | "image/jpeg");
+        console.log("[OCR] length:", extractedText.length);
+      } catch (imgOcrErr: unknown) {
+        console.warn("[OCR] image AI OCR failed:", imgOcrErr instanceof Error ? imgOcrErr.message : imgOcrErr);
+      }
+
+    } else {
+      // ── Unknown: best-effort UTF-8 decode ────────────────────────────────────
+      console.warn("[analyze] Unknown file type, attempting UTF-8 decode");
+      extractedText = buffer.toString("utf-8").trim();
     }
 
-    // ── Strict text validation — NO TEXT → NO AI CALL ────────────────────────
+    // ── Always proceed to AI analysis — no early returns after this point ─────
     console.log("[TEXT LENGTH]:", extractedText.length);
 
-    if (!extractedText || extractedText.length < 50) {
-      console.error("[analyze] Insufficient text extracted after all parsers, blocking AI call");
-      return res.status(200).json({
-        summary: "Could not extract text from the document.",
-        risks: [] as string[],
-        clauses: [] as string[],
-        risk_score: 0,
-        error: "PARSE_FAILED",
-        parse_fail_reason: "No usable text could be extracted — document may be a scanned image without embedded text",
-      });
+    if (!extractedText || extractedText.trim().length === 0) {
+      console.error("[analyze] No text after all parsers and OCR — returning PARSE_FAILED");
+      return res.status(200).json(safeExit("PARSE_FAILED", "No text could be extracted from the document. It may be a scanned image that could not be read by OCR."));
     }
 
-    console.log("[analyze] VALID TEXT LENGTH:", extractedText.length);
+    const trimmedText = extractedText.length > MAX_TEXT_CHARS
+      ? extractedText.slice(0, MAX_TEXT_CHARS)
+      : extractedText;
 
-    const trimmedText =
-      extractedText.length > MAX_TEXT_CHARS
-        ? extractedText.slice(0, MAX_TEXT_CHARS)
-        : extractedText;
+    console.log("[analyze] proceeding to AI with text length:", trimmedText.length);
 
-    // ── LLM Analysis — only reached with valid extractedText ─────────────────
+    // ── LLM Analysis ─────────────────────────────────────────────────────────
     let result: LLMResult;
     try {
       result = await analyzeWithLLM(trimmedText);

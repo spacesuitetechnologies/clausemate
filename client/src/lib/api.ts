@@ -48,7 +48,12 @@ export class ApiError extends Error {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.ok) {
     const text = await res.text();
-    return (text ? JSON.parse(text) : {}) as T;
+    if (!text) return {} as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new ApiError(`Server returned non-JSON response`, res.status);
+    }
   }
 
   let message = `HTTP ${res.status}`;
