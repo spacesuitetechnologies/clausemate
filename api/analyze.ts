@@ -217,70 +217,56 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
-// ── AI OCR — send document to OpenAI for text extraction ─────────────────────
-// PDFs rendered to PNG via pdfjs-dist + canvas, then sent as input_image.
-// Images sent directly as input_image.
-
-async function pdfToImageBase64(buffer: Buffer): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any).catch(() => import("pdfjs-dist"));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { createCanvas } = await import("canvas") as any;
-
-  const pdfjs = (pdfjsLib as any).default ?? pdfjsLib;
-  pdfjs.GlobalWorkerOptions.workerSrc = "";
-
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true });
-  const pdfDoc = await loadingTask.promise;
-  const page = await pdfDoc.getPage(1);
-
-  const viewport = page.getViewport({ scale: 2.0 });
-  const canvas = createCanvas(viewport.width, viewport.height);
-  const context = canvas.getContext("2d");
-
-  await page.render({ canvasContext: context, viewport }).promise;
-
-  const imageBuffer: Buffer = canvas.toBuffer("image/png");
-  return imageBuffer.toString("base64");
-}
+// ── AI OCR — upload file to OpenAI then extract text via Responses API ────────
 
 async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
-  let imageBase64: string;
+  // STEP 1: Upload file to OpenAI
+  console.log("[AI OCR] uploading file, size:", buffer.length, "mime:", mimeType);
+  const ext = mimeType === "application/pdf" ? "pdf" : mimeType === "image/png" ? "png" : "jpg";
+  const filename = `document.${ext}`;
 
-  if (mimeType === "application/pdf") {
-    console.log("[AI OCR] converting PDF page 1 to PNG");
-    imageBase64 = await pdfToImageBase64(buffer);
-  } else {
-    imageBase64 = Buffer.from(buffer).toString("base64");
+  const formData = new FormData();
+  formData.append("purpose", "assistants");
+  formData.append("file", new Blob([buffer], { type: mimeType }), filename);
+
+  const uploadRes = await fetch("https://api.openai.com/v1/files", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: formData,
+  });
+
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text().catch(() => "");
+    throw new Error(`OpenAI file upload failed ${uploadRes.status}: ${err.slice(0, 300)}`);
   }
 
-  console.log("BASE64 LENGTH:", imageBase64.length);
+  const uploadData = await uploadRes.json() as { id: string };
+  const uploadedFileId = uploadData.id;
+  console.log("[AI OCR] file uploaded, id:", uploadedFileId);
 
-  const content = [
-    {
-      type: "input_text",
-      text: "Extract all readable text from this document.",
-    },
-    {
-      type: "input_image",
-      image_url: `data:image/png;base64,${imageBase64}`,
-    },
-  ];
-
-  const requestBody = {
-    model: "gpt-4o-mini",
-    input: [{ role: "user", content }],
-  };
-
+  // STEP 2: Send file_id to Responses API
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Extract all readable text from this contract." },
+            { type: "input_file", file_id: uploadedFileId },
+          ],
+        },
+      ],
+    }),
   });
 
   console.log("[AI OCR] status:", response.status);
