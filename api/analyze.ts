@@ -217,42 +217,54 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
-// ── OCR via tesseract.js ──────────────────────────────────────────────────────
+// ── AI OCR — extract text from document buffer via OpenAI vision ─────────────
 
-async function runOCR(imageBuffer: Buffer): Promise<string> {
-  const { recognize } = await import("tesseract.js");
-  const { data } = await recognize(imageBuffer, "eng", { logger: () => {} });
-  return data.text?.trim() ?? "";
-}
+async function aiOCR(buffer: Buffer): Promise<string> {
+  if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
-// ── Scanned PDF → render page → OCR ──────────────────────────────────────────
-// Uses pdfjs-dist to render the first page to an OffscreenCanvas, converts it
-// to a PNG buffer, then runs Tesseract OCR on the image.
-// Requires a runtime with OffscreenCanvas (Vercel Edge Runtime / Node ≥ 22).
+  const base64 = buffer.toString("base64");
 
-async function extractTextFromScannedPDF(buffer: Buffer): Promise<string> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
-  const pathMod = await import("path");
-  const urlMod  = await import("url");
-  const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text",  text: "Extract all readable text from this document. Return only the raw text, no commentary." },
+            { type: "input_image", image_base64: base64 },
+          ],
+        },
+      ],
+    }),
+  });
 
-  const pdf      = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), disableFontFace: true, useSystemFonts: false }).promise;
-  const page     = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 2 });
+  if (!response.ok) {
+    const err = await response.text().catch(() => "");
+    throw new Error(`AI OCR API error ${response.status}: ${err.slice(0, 200)}`);
+  }
 
-  // OffscreenCanvas is available in Vercel Edge Runtime and Node ≥ 22
-  const canvas  = new OffscreenCanvas(viewport.width, viewport.height);
-  const context = canvas.getContext("2d");
+  const data = await response.json() as {
+    output_text?: string;
+    output?: Array<{ content?: Array<{ text?: string }> }>;
+  };
+  console.log("[AI OCR RAW RESPONSE]", JSON.stringify(data, null, 2));
 
-  await page.render({ canvasContext: context!, viewport }).promise;
-  await pdf.destroy();
+  const ocrText =
+    data.output_text ||
+    data.output?.[0]?.content?.[0]?.text ||
+    "";
 
-  const blob        = await canvas.convertToBlob({ type: "image/png" });
-  const arrayBuffer = await blob.arrayBuffer();
-  const imageBuffer = Buffer.from(arrayBuffer);
+  if (!ocrText || ocrText.length < 20) {
+    throw new Error("AI OCR returned empty text");
+  }
 
-  return runOCR(imageBuffer);
+  return ocrText.trim();
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -423,17 +435,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // ── OCR fallback: pdfjs render → tesseract (scanned PDFs) ───────────
+        // ── AI OCR fallback (scanned / image-only PDFs) ───────────────────
         if (!extractedText || extractedText.length < 50) {
-          console.log("[OCR] pdfjs fallback triggered");
+          console.log("[OCR] triggered");
           try {
-            const ocrText = await extractTextFromScannedPDF(buffer);
+            const ocrText = await aiOCR(buffer);
             console.log("[OCR] length:", ocrText.length);
             if (ocrText.length > 50) {
               extractedText = ocrText;
             }
           } catch (ocrErr: unknown) {
-            console.warn("[OCR] pdfjs failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
+            console.warn("[OCR] failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
           }
         }
 
@@ -450,9 +462,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log("[analyze] txt result length:", extractedText.length);
 
       } else if (isImage) {
-        // ── Image: OCR directly ───────────────────────────────────────────────
+        // ── Image: AI OCR directly ────────────────────────────────────────────
         console.log("[OCR] triggered for image");
-        extractedText = await runOCR(buffer);
+        try {
+          extractedText = await aiOCR(buffer);
+        } catch (imgOcrErr: unknown) {
+          console.warn("[OCR] image AI OCR failed:", imgOcrErr instanceof Error ? imgOcrErr.message : imgOcrErr);
+        }
         console.log("[OCR] length:", extractedText.length);
 
       } else {
