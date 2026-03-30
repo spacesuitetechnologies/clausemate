@@ -6,6 +6,9 @@
   "functions": {
     "api/analyze.ts": {
       "maxDuration": 60
+    },
+    "api/generate-clause.ts": {
+      "maxDuration": 30
     }
   }
 }

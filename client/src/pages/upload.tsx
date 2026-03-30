@@ -22,6 +22,8 @@ import {
   BarChart3,
   FileX,
   Lightbulb,
+  Copy,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -37,6 +39,7 @@ import { saveDirectAnalysis } from "@/lib/analyses";
 import type { AnalysisCost } from "@/lib/credits";
 import type { ClauseResult } from "@/types/analysis";
 import type { AnalyzeContractResult } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 // Three concrete steps shown in the progress panel
 const ANALYSIS_STEPS = ["Uploading contract", "Processing document", "Generating results"];
@@ -421,6 +424,23 @@ function AnalysisSections({
   );
 }
 
+// ── Copy button with transient "Copied" feedback ─────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}
+      className="absolute top-2 right-2 p-1 rounded hover:bg-yellow-50 transition-colors"
+      title="Copy clause"
+    >
+      {copied
+        ? <ClipboardCheck className="h-3.5 w-3.5 text-green-600" />
+        : <Copy className="h-3.5 w-3.5 text-foreground/40 hover:text-foreground/70" />}
+    </button>
+  );
+}
+
 // ── Main upload component ──────────────────────────────────────────────────────
 
 function UploadContent() {
@@ -448,8 +468,44 @@ function UploadContent() {
   const [directResult, setDirectResult] = useState<AnalyzeContractResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const [generatedClauses, setGeneratedClauses] = useState<Record<number, { text: string; loading: boolean; error: string | null; expanded: boolean }>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function generateClause(index: number, clause: string, fix: string) {
+    setGeneratedClauses((prev) => ({
+      ...prev,
+      [index]: { text: "", loading: true, error: null, expanded: false },
+    }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/generate-clause", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ clause, fix }),
+      });
+      const json = await res.json() as { clause_text?: string; error?: string };
+      if (!res.ok || !json.clause_text) {
+        setGeneratedClauses((prev) => ({
+          ...prev,
+          [index]: { text: "", loading: false, error: json.error ?? "Failed to generate clause", expanded: false },
+        }));
+      } else {
+        setGeneratedClauses((prev) => ({
+          ...prev,
+          [index]: { text: json.clause_text!, loading: false, error: null, expanded: true },
+        }));
+      }
+    } catch {
+      setGeneratedClauses((prev) => ({
+        ...prev,
+        [index]: { text: "", loading: false, error: "Network error", expanded: false },
+      }));
+    }
+  }
 
   const estimated = estimateCost(1, includeRedlines, 6);
   const affordCheck = checkAffordability(estimated.estimated_credits);
@@ -526,6 +582,7 @@ function UploadContent() {
     setAnalysisError(null);
     setAnalysisId(null);
     setDirectResult(null);
+    setGeneratedClauses({});
 
     try {
       setCurrentStep(2); // Generating results
@@ -678,6 +735,7 @@ function UploadContent() {
                   setContractId(null);
                   setAnalysisError(null);
                   setDirectResult(null);
+    setGeneratedClauses({});
                   if (fileInputRef.current) fileInputRef.current.value = "";
                 }}
               >
@@ -894,7 +952,57 @@ function UploadContent() {
                   <span className="text-[11px] font-semibold uppercase tracking-widest text-foreground/50">Summary</span>
                 </div>
                 <p className="text-[13px] text-foreground/75 leading-relaxed">{directResult.summary}</p>
+                <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/30 mt-2">
+                  AI-powered analysis based on common Indian contract standards. Not legal advice.
+                </p>
               </div>
+
+              {/* Risk Score card */}
+              {directResult.risk_score != null && (() => {
+                const score = directResult.risk_score;
+                const label = score >= 70 ? "High Risk" : score >= 40 ? "Medium Risk" : "Low Risk";
+                const barColor = score >= 70 ? "bg-red-500" : score >= 40 ? "bg-amber-400" : "bg-green-500";
+                const labelColor = score >= 70 ? "text-red-600" : score >= 40 ? "text-amber-600" : "text-green-600";
+                const labelBg = score >= 70 ? "bg-red-50 border-red-100" : score >= 40 ? "bg-amber-50 border-amber-100" : "bg-green-50 border-green-100";
+
+                // Top 3 contributors: high risks first, then medium, then missing clauses
+                const highRisks = (directResult.risks ?? []).filter((r) => r.startsWith("[high]"));
+                const medRisks  = (directResult.risks ?? []).filter((r) => r.startsWith("[medium]"));
+                const topRisks  = [...highRisks, ...medRisks].slice(0, 3);
+                const missingTop = (directResult.missing_clauses ?? []).slice(0, Math.max(0, 3 - topRisks.length));
+                const contributors: { text: string; type: "risk" | "missing" }[] = [
+                  ...topRisks.map((r) => ({ text: r.replace(/^\[\w+\]\s*/, ""), type: "risk" as const })),
+                  ...missingTop.map((m) => ({ text: `Missing: ${m.clause}`, type: "missing" as const })),
+                ];
+
+                return (
+                  <div className="rounded-xl border border-border/60 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-foreground/50">Risk Score</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${labelBg} ${labelColor}`}>{label}</span>
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <span className="text-3xl font-bold text-foreground/90 leading-none">{score}</span>
+                      <span className="text-[11px] text-muted-foreground mb-0.5">/ 100</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${score}%` }} />
+                    </div>
+                    {contributors.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-foreground/40">Top contributors</p>
+                        {contributors.map((c, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className={`mt-0.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.type === "risk" ? "bg-red-400" : "bg-orange-400"}`} />
+                            <span className="text-[11px] text-foreground/65 leading-snug">{c.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="rounded-xl border border-border/60 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <ShieldAlert className="h-4 w-4 text-red-400" />
@@ -973,12 +1081,48 @@ function UploadContent() {
                   <p className="text-[12px] text-muted-foreground">No suggestions available.</p>
                 ) : (
                   <div className="space-y-2">
-                    {directResult.suggestions!.map((item, i) => (
-                      <div key={i} className="rounded-lg bg-yellow-50/60 border border-yellow-200/60 px-3 py-2.5 space-y-1">
-                        <span className="text-[12px] font-semibold text-foreground/80">{item.clause}</span>
-                        <p className="text-[11px] text-foreground/70 leading-relaxed">{item.fix}</p>
-                      </div>
-                    ))}
+                    {directResult.suggestions!.map((item, i) => {
+                      const gen = generatedClauses[i];
+                      return (
+                        <div key={i} className="rounded-lg bg-yellow-50/60 border border-yellow-200/60 px-3 py-2.5 space-y-2">
+                          <span className="text-[12px] font-semibold text-foreground/80">{item.clause}</span>
+                          <p className="text-[11px] text-foreground/70 leading-relaxed">{item.fix}</p>
+                          {/* Generate button */}
+                          {!gen?.text && (
+                            <button
+                              onClick={() => generateClause(i, item.clause, item.fix)}
+                              disabled={!!gen?.loading}
+                              className="text-[11px] font-medium text-yellow-700 hover:text-yellow-900 underline underline-offset-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              {gen?.loading ? "Generating…" : "Generate Clause"}
+                            </button>
+                          )}
+                          {/* Error */}
+                          {gen?.error && (
+                            <p className="text-[11px] text-red-500">{gen.error} —{" "}
+                              <button onClick={() => generateClause(i, item.clause, item.fix)} className="underline">retry</button>
+                            </p>
+                          )}
+                          {/* Generated clause */}
+                          {gen?.text && (
+                            <div className="space-y-1.5">
+                              <button
+                                onClick={() => setGeneratedClauses((prev) => ({ ...prev, [i]: { ...prev[i], expanded: !prev[i].expanded } }))}
+                                className="text-[11px] font-medium text-yellow-700 hover:text-yellow-900 underline underline-offset-2 transition-colors"
+                              >
+                                {gen.expanded ? "Hide clause" : "Show clause"}
+                              </button>
+                              {gen.expanded && (
+                                <div className="relative rounded-md bg-white border border-yellow-200 p-3">
+                                  <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap pr-7">{gen.text}</p>
+                                  <CopyButton text={gen.text} />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1035,6 +1179,26 @@ function UploadContent() {
             </span>
           )}
         </div>
+
+        {/* Insight markers strip */}
+        {phase === "results" && directResult && (
+          (directResult.clauses.length > 0 || (directResult.missing_clauses?.length ?? 0) > 0) && (
+            <div className="px-3 py-2 border-b border-border/30 bg-white/70 flex flex-wrap gap-1.5 shrink-0">
+              {directResult.clauses.map((c, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+                  {c}
+                </span>
+              ))}
+              {(directResult.missing_clauses ?? []).map((m, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-orange-400 shrink-0" />
+                  Missing: {m.clause}
+                </span>
+              ))}
+            </div>
+          )
+        )}
 
         {/* Viewer body */}
         <div className="h-[50vh] md:h-auto md:flex-1 overflow-auto">
