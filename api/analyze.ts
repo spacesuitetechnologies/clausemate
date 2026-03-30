@@ -253,8 +253,10 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
   }
 
   console.log("[AI OCR] sending request — buffer length:", buffer.length, "mime:", mimeType);
+  console.log("[DEBUG] MIME TYPE:", mimeType);
 
   const base64 = buffer.toString("base64");
+  console.log("[DEBUG] BASE64 LENGTH:", base64.length);
 
   const content = [
     { type: "input_text",  text: "Extract all readable text from this image." },
@@ -286,7 +288,8 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     output_text?: string;
     output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
   };
-  console.log("[AI OCR RAW RESPONSE]", JSON.stringify(data, null, 2));
+  console.log("[DEBUG] STATUS:", response.status);
+  console.log("[DEBUG] RAW RESPONSE:", JSON.stringify(data));
 
   const ocrText =
     data.output_text ||
@@ -294,9 +297,13 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     data.output?.[0]?.content?.[0]?.text ||
     "";
 
-  if (!ocrText || ocrText.length < 20) {
-    throw new Error("AI OCR returned empty text");
-  }
+  console.log("[DEBUG] FINAL OCR TEXT:", ocrText?.slice(0, 200));
+  console.log("[DEBUG] FINAL OCR LENGTH:", ocrText?.length);
+
+  // DEBUG: validation disabled — re-enable after diagnosis
+  // if (!ocrText || ocrText.length < 20) {
+  //   throw new Error("AI OCR returned empty text");
+  // }
 
   return ocrText.trim();
 }
@@ -430,7 +437,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const pdfParse = (pdfModule as any).default ?? pdfModule;
           const parsed = await pdfParse(buffer);
           extractedText = parsed?.text?.trim() ?? "";
-          console.log("[analyze] pdf-parse result length:", extractedText.length);
+          console.log("[DEBUG] PDF PARSE RESULT LENGTH:", extractedText?.length);
+          console.log("[DEBUG] PDF PARSE RAW:", extractedText?.slice(0, 200));
         } catch (primaryErr: unknown) {
           console.warn("[analyze] pdf-parse failed:", primaryErr instanceof Error ? primaryErr.message : primaryErr);
         }
@@ -471,7 +479,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── AI OCR fallback (scanned / image-only PDFs) ───────────────────
-        if (!extractedText || extractedText.length < 50) {
+        console.log("[DEBUG] BEFORE OCR CHECK:", { hasText: !!extractedText, length: extractedText?.length });
+        if (true) { // DEBUG: forced — remove after diagnosis
           console.log("[OCR] triggered");
           try {
             const ocrText = await aiOCR(buffer, "application/pdf");
