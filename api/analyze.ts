@@ -217,6 +217,32 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
+// ── PDF → image conversion ────────────────────────────────────────────────────
+
+async function convertPdfToImage(buffer: Buffer): Promise<Buffer> {
+  const { fromBuffer } = await import("pdf2pic");
+  const convert = fromBuffer(buffer, {
+    density: 150,
+    format: "png",
+    width: 1200,
+    height: 1600,
+    responseType: "base64",
+  });
+  const page = await convert(1);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base64 = typeof page === "string" ? page : (page as any)?.base64 ?? "";
+  if (!base64) throw new Error("PDF to image conversion failed");
+  return Buffer.from(base64, "base64");
+}
+
+// ── OCR via tesseract.js ──────────────────────────────────────────────────────
+
+async function runOCR(imageBuffer: Buffer): Promise<string> {
+  const { recognize } = await import("tesseract.js");
+  const { data } = await recognize(imageBuffer, "eng", { logger: () => {} });
+  return data.text?.trim() ?? "";
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -387,21 +413,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // ── OCR fallback: pdf → image → tesseract (scanned PDFs) ────────────
         if (!extractedText || extractedText.length < 50) {
-          console.log("[OCR] triggered");
+          console.log("[OCR] triggered for PDF");
           try {
-            const { fromBuffer } = await import("pdf2pic");
-            const convert = fromBuffer(buffer, {
-              density: 150,
-              format: "png",
-              width: 1200,
-              height: 1600,
-            });
-            const page = await convert(1); // first page only
-            if (!page?.base64) throw new Error("pdf2pic returned no image data");
-            const imageBuffer = Buffer.from(page.base64, "base64");
-            const { recognize } = await import("tesseract.js");
-            const { data } = await recognize(imageBuffer, "eng", { logger: () => {} });
-            const ocrText = data.text?.trim() ?? "";
+            const imageBuffer = await convertPdfToImage(buffer);
+            const ocrText = await runOCR(imageBuffer);
             console.log("[OCR] length:", ocrText.length);
             if (ocrText.length > 50) {
               extractedText = ocrText;
@@ -426,9 +441,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else if (isImage) {
         // ── Image: OCR directly ───────────────────────────────────────────────
         console.log("[OCR] triggered for image");
-        const { recognize } = await import("tesseract.js");
-        const { data } = await recognize(buffer, "eng", { logger: () => {} });
-        extractedText = data.text?.trim() ?? "";
+        extractedText = await runOCR(buffer);
         console.log("[OCR] length:", extractedText.length);
 
       } else {
