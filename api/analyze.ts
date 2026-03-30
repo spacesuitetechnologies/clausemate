@@ -226,8 +226,7 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
 
   console.log("[AI OCR] sending request — buffer length:", buffer.length, "mime:", mimeType);
 
-  const base64   = buffer.toString("base64");
-  const dataUrl  = `data:${mimeType};base64,${base64}`;
+  const base64 = buffer.toString("base64");
 
   const content =
     mimeType === "application/pdf"
@@ -240,10 +239,21 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
           { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
         ];
 
+  if (!Array.isArray(content) || content.length !== 2) {
+    throw new Error("INVALID OCR CONTENT STRUCTURE");
+  }
+
   const requestBody = {
     model: "gpt-4o-mini",
-    input: [{ role: "user", content }],
+    input: [
+      {
+        role: "user",
+        content,
+      },
+    ],
   };
+
+  console.log("[AI OCR REAL REQUEST]", JSON.stringify(requestBody, null, 2));
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
