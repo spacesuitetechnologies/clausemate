@@ -229,14 +229,16 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
   const base64   = buffer.toString("base64");
   const dataUrl  = `data:${mimeType};base64,${base64}`;
 
-  const fileContent = mimeType === "application/pdf"
-    ? { type: "input_file",  file_data: dataUrl }
-    : { type: "input_image", image_url: dataUrl };
-
-  const content = [
-    { type: "input_text", text: "Extract all readable text from this document. Return only the raw text." },
-    fileContent,
-  ];
+  const content =
+    mimeType === "application/pdf"
+      ? [
+          { type: "input_text", text: "Extract all readable text from this PDF document." },
+          { type: "input_file", file_data: `data:application/pdf;base64,${base64}` },
+        ]
+      : [
+          { type: "input_text", text: "Extract all readable text from this image." },
+          { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
+        ];
 
   const requestBody = {
     model: "gpt-4o-mini",
