@@ -18,10 +18,10 @@ const RATE_LIMIT_MS = 5_000;
 // ── Safe fallback — always valid AnalyzeContractResult shape ─────────────────
 function safeExit(error: string, detail?: string) {
   return {
-    summary: null as string | null,
+    summary: "Analysis could not be completed." as string,
     risks: [] as string[],
     clauses: [] as string[],
-    risk_score: null as number | null,
+    risk_score: 0 as number,
     error,
     parse_fail_reason: detail ?? error,
   };
@@ -201,6 +201,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Input validation ──────────────────────────────────────────────────────
     const body = (req.body ?? {}) as Record<string, unknown>;
+    console.log("[analyze] REQUEST:", JSON.stringify({ contract_id: body.contract_id, include_redlines: body.include_redlines }));
+
     const contract_id = body.contract_id;
     const include_redlines = body.include_redlines === true;
 
@@ -249,6 +251,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(safeExit("DOWNLOAD_ERROR", msg));
     }
 
+    console.log("[analyze] FILE SIZE:", fileBlob?.size ?? 0);
+
     if (!fileBlob || fileBlob.size === 0) {
       return res.status(200).json(safeExit("PARSE_FAILED", "File is empty"));
     }
@@ -266,13 +270,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         filename.toLowerCase().endsWith(".pdf");
 
       if (isPdf) {
-        const pdfParse = (await import("pdf-parse")).default;
-        const parsed = await pdfParse(buffer);
-        extractedText = parsed?.text?.trim() ?? "";
-        if (!extractedText || extractedText.length < 20) {
-          return res.status(200).json(safeExit("PARSE_FAILED", "Could not extract text from PDF — document may be a scanned image or corrupted"));
+        // ── Primary parser: pdf-parse ─────────────────────────────────────────
+        try {
+          const pdfModule = await import("pdf-parse");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pdfParse = (pdfModule as any).default ?? pdfModule;
+          const parsed = await pdfParse(buffer);
+          extractedText = parsed?.text?.trim() ?? "";
+          console.log("[analyze] pdf-parse result length:", extractedText.length);
+        } catch (primaryErr: unknown) {
+          console.warn("[analyze] pdf-parse failed:", primaryErr instanceof Error ? primaryErr.message : primaryErr);
         }
-        console.log("[analyze] PDF TEXT LENGTH:", extractedText.length);
+
+        // ── Fallback parser: pdfjs-dist (richer text extraction) ─────────────
+        if (!extractedText || extractedText.length < 50) {
+          console.log("[analyze] FALLBACK PARSER TRIGGERED");
+          try {
+            const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
+            // Resolve worker via process.cwd() — Vercel sets cwd to project root
+            const pathMod = await import("path");
+            const urlMod = await import("url");
+            const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
+
+            const data = new Uint8Array(buffer);
+            const loadingTask = pdfjsLib.getDocument({ data, disableFontFace: true, useSystemFonts: false });
+            const pdf = await loadingTask.promise;
+
+            const pages: string[] = [];
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+              const page = await pdf.getPage(pageNum);
+              const content = await page.getTextContent();
+              const pageText = (content.items as Array<{ str?: string }>)
+                .map((item) => item.str ?? "")
+                .join(" ");
+              pages.push(pageText);
+            }
+            await pdf.destroy();
+
+            const fallbackText = pages.join("\n").trim();
+            console.log("[analyze] pdfjs-dist fallback result length:", fallbackText.length);
+
+            if (fallbackText && fallbackText.length > 50) {
+              extractedText = fallbackText;
+            }
+          } catch (fallbackErr: unknown) {
+            console.warn("[analyze] pdfjs-dist fallback failed:", fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
+          }
+        }
       } else {
         // Plain text fallback
         extractedText = buffer.toString("utf-8").trim();
@@ -283,18 +328,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(safeExit("PARSE_FAILED", reason));
     }
 
-    if (!extractedText) {
-      return res.status(200).json(safeExit("PARSE_FAILED", "No text could be extracted — document may be a scanned image"));
+    // ── Strict text validation — NO TEXT → NO AI CALL ────────────────────────
+    console.log("[analyze] TEXT LENGTH:", extractedText.length);
+
+    if (!extractedText || extractedText.length < 50) {
+      console.error("[analyze] Insufficient text extracted after all parsers, blocking AI call");
+      return res.status(200).json({
+        summary: "Could not extract text from PDF.",
+        risks: [] as string[],
+        clauses: [] as string[],
+        risk_score: 0,
+        error: "PDF_PARSE_FAILED",
+        parse_fail_reason: "No text could be extracted — document may be a scanned image without embedded text",
+      });
     }
+
+    console.log("[analyze] VALID TEXT LENGTH:", extractedText.length);
 
     const trimmedText =
       extractedText.length > MAX_TEXT_CHARS
         ? extractedText.slice(0, MAX_TEXT_CHARS)
         : extractedText;
 
-    console.log("[analyze] Text extracted, length:", trimmedText.length, "include_redlines:", include_redlines);
-
-    // ── LLM Analysis ─────────────────────────────────────────────────────────
+    // ── LLM Analysis — only reached with valid extractedText ─────────────────
     let result: LLMResult;
     try {
       result = await analyzeWithLLM(trimmedText);
