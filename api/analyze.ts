@@ -245,12 +245,7 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
 
   const requestBody = {
     model: "gpt-4o-mini",
-    input: [
-      {
-        role: "user",
-        content,
-      },
-    ],
+    input: [{ role: "user", content }],
   };
 
   console.log("[AI OCR REAL REQUEST]", JSON.stringify(requestBody, null, 2));
