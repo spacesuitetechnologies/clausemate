@@ -29,7 +29,8 @@
       "Read(//private/tmp/**)",
       "Bash(cat /Users/sharan/Desktop/clausemate/tsconfig.*.json)",
       "Bash(node -e \"console.log\\(require\\(''./node_modules/pdfjs-dist/package.json''\\).version\\)\")",
-      "Bash(node --input-type=module -e \"import { getDocument } from ''''pdfjs-dist''''; console.log\\(typeof getDocument\\)\")"
+      "Bash(node --input-type=module -e \"import { getDocument } from ''''pdfjs-dist''''; console.log\\(typeof getDocument\\)\")",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

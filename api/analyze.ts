@@ -217,30 +217,42 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
-// ── PDF → image conversion ────────────────────────────────────────────────────
-
-async function convertPdfToImage(buffer: Buffer): Promise<Buffer> {
-  const { fromBuffer } = await import("pdf2pic");
-  const convert = fromBuffer(buffer, {
-    density: 150,
-    format: "png",
-    width: 1200,
-    height: 1600,
-    responseType: "base64",
-  });
-  const page = await convert(1);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const base64 = typeof page === "string" ? page : (page as any)?.base64 ?? "";
-  if (!base64) throw new Error("PDF to image conversion failed");
-  return Buffer.from(base64, "base64");
-}
-
 // ── OCR via tesseract.js ──────────────────────────────────────────────────────
 
 async function runOCR(imageBuffer: Buffer): Promise<string> {
   const { recognize } = await import("tesseract.js");
   const { data } = await recognize(imageBuffer, "eng", { logger: () => {} });
   return data.text?.trim() ?? "";
+}
+
+// ── Scanned PDF → render page → OCR ──────────────────────────────────────────
+// Uses pdfjs-dist to render the first page to an OffscreenCanvas, converts it
+// to a PNG buffer, then runs Tesseract OCR on the image.
+// Requires a runtime with OffscreenCanvas (Vercel Edge Runtime / Node ≥ 22).
+
+async function extractTextFromScannedPDF(buffer: Buffer): Promise<string> {
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
+  const pathMod = await import("path");
+  const urlMod  = await import("url");
+  const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
+
+  const pdf      = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), disableFontFace: true, useSystemFonts: false }).promise;
+  const page     = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+
+  // OffscreenCanvas is available in Vercel Edge Runtime and Node ≥ 22
+  const canvas  = new OffscreenCanvas(viewport.width, viewport.height);
+  const context = canvas.getContext("2d");
+
+  await page.render({ canvasContext: context!, viewport }).promise;
+  await pdf.destroy();
+
+  const blob        = await canvas.convertToBlob({ type: "image/png" });
+  const arrayBuffer = await blob.arrayBuffer();
+  const imageBuffer = Buffer.from(arrayBuffer);
+
+  return runOCR(imageBuffer);
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -411,18 +423,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // ── OCR fallback: pdf → image → tesseract (scanned PDFs) ────────────
+        // ── OCR fallback: pdfjs render → tesseract (scanned PDFs) ───────────
         if (!extractedText || extractedText.length < 50) {
-          console.log("[OCR] triggered for PDF");
+          console.log("[OCR] pdfjs fallback triggered");
           try {
-            const imageBuffer = await convertPdfToImage(buffer);
-            const ocrText = await runOCR(imageBuffer);
+            const ocrText = await extractTextFromScannedPDF(buffer);
             console.log("[OCR] length:", ocrText.length);
             if (ocrText.length > 50) {
               extractedText = ocrText;
             }
           } catch (ocrErr: unknown) {
-            console.warn("[OCR] failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
+            console.warn("[OCR] pdfjs failed:", ocrErr instanceof Error ? ocrErr.message : ocrErr);
           }
         }
 
