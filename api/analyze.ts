@@ -232,7 +232,7 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     mimeType === "application/pdf"
       ? [
           { type: "input_text", text: "Extract all readable text from this PDF document." },
-          { type: "input_file", file_data: base64 },
+          { type: "input_file", file_data: base64, filename: "document.pdf" },
         ]
       : [
           { type: "input_text", text: "Extract all readable text from this image." },
