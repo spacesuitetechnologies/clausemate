@@ -218,25 +218,54 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
 }
 
 // ── AI OCR — send document to OpenAI for text extraction ─────────────────────
-// PDFs sent as input_file; images sent as input_image.
-// No pdfjs, no canvas, no worker — runs cleanly on Vercel.
+// PDFs rendered to PNG via pdfjs-dist + canvas, then sent as input_image.
+// Images sent directly as input_image.
+
+async function pdfToImageBase64(buffer: Buffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any).catch(() => import("pdfjs-dist"));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { createCanvas } = await import("canvas") as any;
+
+  const pdfjs = (pdfjsLib as any).default ?? pdfjsLib;
+  pdfjs.GlobalWorkerOptions.workerSrc = "";
+
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true });
+  const pdfDoc = await loadingTask.promise;
+  const page = await pdfDoc.getPage(1);
+
+  const viewport = page.getViewport({ scale: 2.0 });
+  const canvas = createCanvas(viewport.width, viewport.height);
+  const context = canvas.getContext("2d");
+
+  await page.render({ canvasContext: context, viewport }).promise;
+
+  const imageBuffer: Buffer = canvas.toBuffer("image/png");
+  return imageBuffer.toString("base64");
+}
 
 async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
-  const base64 = Buffer.from(buffer).toString("base64");
+  let imageBase64: string;
 
-  console.log("BASE64 SAMPLE:", base64.slice(0, 50));
-  console.log("BASE64 LENGTH:", base64.length);
+  if (mimeType === "application/pdf") {
+    console.log("[AI OCR] converting PDF page 1 to PNG");
+    imageBase64 = await pdfToImageBase64(buffer);
+  } else {
+    imageBase64 = Buffer.from(buffer).toString("base64");
+  }
+
+  console.log("BASE64 LENGTH:", imageBase64.length);
 
   const content = [
     {
       type: "input_text",
-      text: "Extract all readable text from this PDF document.",
+      text: "Extract all readable text from this document.",
     },
     {
-      type: "input_file",
-      file_data: base64,
+      type: "input_image",
+      image_url: `data:image/png;base64,${imageBase64}`,
     },
   ];
 
