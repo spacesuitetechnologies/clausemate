@@ -218,11 +218,31 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
 }
 
 // ── AI OCR — extract text from document buffer via OpenAI vision ─────────────
+// PDFs  → sent as input_file  with file_data "data:application/pdf;base64,..."
+// Images → sent as input_image with image_url  "data:<mime>;base64,..."
 
-async function aiOCR(buffer: Buffer): Promise<string> {
+async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
 
+  console.log("[AI OCR] sending request — buffer length:", buffer.length, "mime:", mimeType);
+
   const base64 = buffer.toString("base64");
+
+  const content =
+    mimeType === "application/pdf"
+      ? [
+          { type: "input_text", text: "Extract all readable text from this PDF document." },
+          { type: "input_file", file_data: `data:application/pdf;base64,${base64}` },
+        ]
+      : [
+          { type: "input_text", text: "Extract all readable text from this image." },
+          { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
+        ];
+
+  const requestBody = {
+    model: "gpt-4o-mini",
+    input: [{ role: "user", content }],
+  };
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -230,33 +250,25 @@ async function aiOCR(buffer: Buffer): Promise<string> {
       "Authorization": `Bearer ${openaiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text",  text: "Extract all readable text from this document. Return only the raw text, no commentary." },
-            { type: "input_image", image_base64: base64 },
-          ],
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
+
+  console.log("[AI OCR] status:", response.status);
 
   if (!response.ok) {
     const err = await response.text().catch(() => "");
-    throw new Error(`AI OCR API error ${response.status}: ${err.slice(0, 200)}`);
+    throw new Error(`AI OCR API error ${response.status}: ${err.slice(0, 300)}`);
   }
 
   const data = await response.json() as {
     output_text?: string;
-    output?: Array<{ content?: Array<{ text?: string }> }>;
+    output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
   };
   console.log("[AI OCR RAW RESPONSE]", JSON.stringify(data, null, 2));
 
   const ocrText =
     data.output_text ||
+    data.output?.find((o) => o.type === "message")?.content?.find((c) => c.type === "output_text")?.text ||
     data.output?.[0]?.content?.[0]?.text ||
     "";
 
@@ -386,6 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const arrayBuffer = await fileBlob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
+      console.log("[STEP] buffer size:", buffer.length, "file type:", ext || "unknown");
 
       if (isPdf) {
         // ── Primary parser: pdf-parse ─────────────────────────────────────────
@@ -439,7 +452,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!extractedText || extractedText.length < 50) {
           console.log("[OCR] triggered");
           try {
-            const ocrText = await aiOCR(buffer);
+            const ocrText = await aiOCR(buffer, "application/pdf");
             console.log("[OCR] length:", ocrText.length);
             if (ocrText.length > 50) {
               extractedText = ocrText;
@@ -464,8 +477,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else if (isImage) {
         // ── Image: AI OCR directly ────────────────────────────────────────────
         console.log("[OCR] triggered for image");
+        const imgMime = ["png"].includes(ext) ? "image/png" : "image/jpeg";
         try {
-          extractedText = await aiOCR(buffer);
+          extractedText = await aiOCR(buffer, imgMime as "image/png" | "image/jpeg");
         } catch (imgOcrErr: unknown) {
           console.warn("[OCR] image AI OCR failed:", imgOcrErr instanceof Error ? imgOcrErr.message : imgOcrErr);
         }
