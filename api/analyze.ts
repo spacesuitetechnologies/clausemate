@@ -217,27 +217,49 @@ async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
   throw new Error("No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment variables.");
 }
 
-// ── AI OCR — extract text from document buffer via OpenAI vision ─────────────
-// PDFs  → sent as input_file  with file_data "data:application/pdf;base64,..."
-// Images → sent as input_image with image_url  "data:<mime>;base64,..."
+// ── PDF → PNG image (first page) via pdfjs-dist + canvas ─────────────────────
+
+async function pdfToImage(buffer: Buffer): Promise<Buffer> {
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
+  const pathMod  = await import("path");
+  const urlMod   = await import("url");
+  const workerPath = pathMod.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = urlMod.pathToFileURL(workerPath).href;
+
+  const pdf      = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), disableFontFace: true, useSystemFonts: false }).promise;
+  const page     = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 2 });
+
+  const { createCanvas } = await import("canvas");
+  const canvas  = createCanvas(viewport.width, viewport.height);
+  const context = canvas.getContext("2d");
+
+  await page.render({ canvasContext: context as any, viewport }).promise;
+  await pdf.destroy();
+
+  return canvas.toBuffer("image/png");
+}
+
+// ── AI OCR — PDF is converted to image first, then sent to OpenAI vision ──────
 
 async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" | "image/png" = "application/pdf"): Promise<string> {
   if (!openaiKey) throw new Error("OPENAI_API_KEY not set — AI OCR unavailable");
+
+  // Convert PDF to PNG before sending — OpenAI vision requires an image, not raw PDF bytes
+  if (mimeType === "application/pdf") {
+    console.log("[OCR] converting PDF to image…");
+    buffer = await pdfToImage(buffer);
+    mimeType = "image/png";
+  }
 
   console.log("[AI OCR] sending request — buffer length:", buffer.length, "mime:", mimeType);
 
   const base64 = buffer.toString("base64");
 
-  const content =
-    mimeType === "application/pdf"
-      ? [
-          { type: "input_text", text: "Extract all readable text from this PDF document." },
-          { type: "input_file", file_data: `data:application/pdf;base64,${base64}` },
-        ]
-      : [
-          { type: "input_text", text: "Extract all readable text from this image." },
-          { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
-        ];
+  const content = [
+    { type: "input_text",  text: "Extract all readable text from this image." },
+    { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
+  ];
 
   const requestBody = {
     model: "gpt-4o-mini",
