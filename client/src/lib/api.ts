@@ -320,11 +320,24 @@ export async function startAnalysis(
 
 // ── Direct analysis (mock server endpoint) ────────────────────────────────────
 
+export interface MissingClause {
+  clause: string;
+  importance: string;
+  risk: string;
+}
+
+export interface Suggestion {
+  clause: string;
+  fix: string;
+}
+
 export interface AnalyzeContractResult {
   summary: string | null;
   risks: string[];
   clauses: string[];
   risk_score?: number | null;
+  missing_clauses?: MissingClause[];
+  suggestions?: Suggestion[];
   error?: string;
   parse_fail_reason?: string;
 }

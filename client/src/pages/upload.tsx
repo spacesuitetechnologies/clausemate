@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   ListChecks,
   BarChart3,
+  FileX,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -928,6 +930,57 @@ function UploadContent() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Missing Clauses */}
+              <div className="rounded-xl border border-border/60 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileX className="h-4 w-4 text-orange-400" />
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-foreground/50">Missing Clauses</span>
+                  {(directResult.missing_clauses?.length ?? 0) > 0 && (
+                    <span className="ml-auto text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-100">
+                      {directResult.missing_clauses!.length}
+                    </span>
+                  )}
+                </div>
+                {(directResult.missing_clauses?.length ?? 0) === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">No missing clauses found.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {directResult.missing_clauses!.map((item, i) => (
+                      <div key={i} className="rounded-lg bg-orange-50/60 border border-orange-200/60 px-3 py-2.5 space-y-1">
+                        <span className="text-[12px] font-semibold text-foreground/80">{item.clause}</span>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{item.importance}</p>
+                        <p className="text-[11px] text-orange-700/80 leading-relaxed">{item.risk}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Suggested Fixes */}
+              <div className="rounded-xl border border-border/60 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="h-4 w-4 text-yellow-400" />
+                  <span className="text-[11px] font-semibold uppercase tracking-widest text-foreground/50">Suggested Fixes</span>
+                  {(directResult.suggestions?.length ?? 0) > 0 && (
+                    <span className="ml-auto text-[10px] font-semibold text-yellow-700 bg-yellow-50 px-1.5 py-0.5 rounded-full border border-yellow-200">
+                      {directResult.suggestions!.length}
+                    </span>
+                  )}
+                </div>
+                {(directResult.suggestions?.length ?? 0) === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">No suggestions available.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {directResult.suggestions!.map((item, i) => (
+                      <div key={i} className="rounded-lg bg-yellow-50/60 border border-yellow-200/60 px-3 py-2.5 space-y-1">
+                        <span className="text-[12px] font-semibold text-foreground/80">{item.clause}</span>
+                        <p className="text-[11px] text-foreground/70 leading-relaxed">{item.fix}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

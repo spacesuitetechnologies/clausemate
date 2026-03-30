@@ -22,6 +22,8 @@ function safeExit(error: string, detail?: string) {
     risks: [] as string[],
     clauses: [] as string[],
     risk_score: 0 as number,
+    missing_clauses: [] as MissingClause[],
+    suggestions: [] as Suggestion[],
     error,
     parse_fail_reason: detail ?? error,
   };
@@ -32,6 +34,9 @@ function safeExit(error: string, detail?: string) {
 interface StructuredRisk {
   level: "low" | "medium" | "high";
   reason: string;
+  clause?: string;
+  issue?: string;
+  impact?: string;
 }
 
 interface StructuredClauses {
@@ -39,6 +44,17 @@ interface StructuredClauses {
   payment: string | null;
   liability: string | null;
   [key: string]: string | null;
+}
+
+interface MissingClause {
+  clause: string;
+  importance: string;
+  risk: string;
+}
+
+interface Suggestion {
+  clause: string;
+  fix: string;
 }
 
 interface LLMResult {
@@ -51,6 +67,8 @@ interface LLMResult {
   jurisdiction: string | null;
   structured_risks: StructuredRisk[];
   structured_clauses: StructuredClauses;
+  missing_clauses: MissingClause[];
+  suggestions: Suggestion[];
 }
 
 async function callAnthropic(text: string): Promise<string> {
@@ -98,31 +116,51 @@ async function callOpenAI(text: string): Promise<string> {
 }
 
 function buildPrompt(contractText: string): string {
-  return `You are an expert Indian contract lawyer. Analyze this contract and respond with ONLY a valid JSON object — no markdown, no explanation, no extra text outside the JSON.
+  return `You are an expert contract risk analyst.
+
+Analyze the contract and return ONLY valid JSON — no markdown, no explanation, no text outside the JSON.
 
 Required JSON format:
 {
   "parties": ["Party 1 name", "Party 2 name"],
   "effective_date": "YYYY-MM-DD or descriptive date string, or null if not found",
   "jurisdiction": "Governing law / jurisdiction string, or null if not found",
-  "clauses": {
-    "termination": "Summary of termination clause, or null",
-    "payment": "Summary of payment terms, or null",
-    "liability": "Summary of liability clause, or null"
-  },
+  "summary": "2-3 lines in simple English: what this contract is, who it binds, and its biggest concern",
   "risks": [
-    { "level": "high", "reason": "One-line description of the risk" },
-    { "level": "medium", "reason": "One-line description of the risk" },
-    { "level": "low", "reason": "One-line description of the risk" }
+    {
+      "level": "high",
+      "clause": "Name of the clause (e.g. Indemnification)",
+      "issue": "What is wrong or one-sided",
+      "impact": "Real-world consequence (e.g. You may owe unlimited damages)",
+      "reason": "Why this is a risk"
+    }
   ],
-  "summary": "2-3 sentence executive summary of what this contract is and its key concerns"
+  "missing_clauses": [
+    {
+      "clause": "Clause name (e.g. Limitation of Liability)",
+      "importance": "Why this clause is standard",
+      "risk": "What could go wrong without it"
+    }
+  ],
+  "suggestions": [
+    {
+      "clause": "Clause name",
+      "fix": "Specific change to negotiate or add"
+    }
+  ],
+  "clauses": ["Termination", "Payment", "Liability"],
+  "risk_score": 65
 }
 
 Rules:
-- Extract exact data from the contract; do not invent or assume
-- If a field is not found in the contract, return null for that field
+- Be specific, not generic — reference actual clause language where possible
+- Mention money or legal consequences clearly in impact fields
 - risks: list 2-6 genuine risks; level must be exactly "low", "medium", or "high"
-- Be concise and practical; apply Indian law perspective
+- missing_clauses: list 1-4 clauses absent from the contract that a party should insist on
+- suggestions: list 1-4 concrete negotiation fixes
+- clauses: list all major clause types present in the contract
+- risk_score: 0-100 integer (0=no risk, 100=extremely dangerous)
+- Keep all values concise
 
 CONTRACT:
 ${contractText}`;
@@ -144,10 +182,19 @@ function parseLLMResponse(raw: string): LLMResult {
   // ── Structured risks ──────────────────────────────────────────────────────
   const structuredRisks: StructuredRisk[] = Array.isArray(parsed.risks)
     ? (parsed.risks as unknown[]).flatMap((r) => {
-        if (typeof r === "object" && r !== null && "reason" in r) {
-          const level = String((r as Record<string, unknown>).level ?? "medium").toLowerCase();
+        if (typeof r === "object" && r !== null) {
+          const obj = r as Record<string, unknown>;
+          const level = String(obj.level ?? "medium").toLowerCase();
           const validLevel = (["low", "medium", "high"].includes(level) ? level : "medium") as StructuredRisk["level"];
-          return [{ level: validLevel, reason: String((r as Record<string, unknown>).reason ?? "") }];
+          const reason = String(obj.reason ?? obj.issue ?? "");
+          if (!reason) return [];
+          return [{
+            level: validLevel,
+            reason,
+            ...(obj.clause  != null ? { clause: String(obj.clause) }  : {}),
+            ...(obj.issue   != null ? { issue:  String(obj.issue)  }  : {}),
+            ...(obj.impact  != null ? { impact: String(obj.impact) }  : {}),
+          }];
         }
         // Tolerate legacy plain-string format from model
         if (typeof r === "string") return [{ level: "medium" as const, reason: r }];
@@ -160,23 +207,60 @@ function parseLLMResponse(raw: string): LLMResult {
     ? parsed.clauses as Record<string, unknown>
     : {};
 
+  // When clauses is a flat string array (new prompt format), derive structured keys from it
+  const clauseNames: string[] = Array.isArray(parsed.clauses)
+    ? (parsed.clauses as unknown[]).map(String).filter(Boolean)
+    : [];
+
   const structuredClauses: StructuredClauses = {
-    termination: rawClauses.termination != null ? String(rawClauses.termination) : null,
-    payment:     rawClauses.payment     != null ? String(rawClauses.payment)     : null,
-    liability:   rawClauses.liability   != null ? String(rawClauses.liability)   : null,
+    termination: rawClauses.termination != null ? String(rawClauses.termination) : (clauseNames.find((c) => /terminat/i.test(c)) ?? null),
+    payment:     rawClauses.payment     != null ? String(rawClauses.payment)     : (clauseNames.find((c) => /payment|invoice|fee/i.test(c)) ?? null),
+    liability:   rawClauses.liability   != null ? String(rawClauses.liability)   : (clauseNames.find((c) => /liabilit/i.test(c)) ?? null),
   };
 
   // ── Derived flat arrays for frontend compat ───────────────────────────────
   const risks: string[] = structuredRisks.map((r) => `[${r.level}] ${r.reason}`);
 
-  const clauses: string[] = Object.entries(structuredClauses)
-    .filter(([, v]) => v !== null)
-    .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
+  // clauses: prefer flat string array from model, fall back to structured keys
+  const clauses: string[] = Array.isArray(parsed.clauses)
+    ? (parsed.clauses as unknown[]).map(String).filter(Boolean)
+    : Object.entries(structuredClauses)
+        .filter(([, v]) => v !== null)
+        .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
 
-  // ── Risk score: average of individual levels, default 50 ─────────────────
-  const risk_score = structuredRisks.length > 0
-    ? Math.round(structuredRisks.reduce((sum, r) => sum + (RISK_LEVEL_SCORE[r.level] ?? 50), 0) / structuredRisks.length)
-    : 50;
+  // ── Risk score: use model-provided value if valid, else compute from risks ─
+  const modelScore = typeof parsed.risk_score === "number" ? parsed.risk_score : null;
+  const risk_score = (modelScore !== null && modelScore >= 0 && modelScore <= 100)
+    ? Math.round(modelScore)
+    : structuredRisks.length > 0
+      ? Math.round(structuredRisks.reduce((sum, r) => sum + (RISK_LEVEL_SCORE[r.level] ?? 50), 0) / structuredRisks.length)
+      : 50;
+
+  // ── missing_clauses ───────────────────────────────────────────────────────
+  const missing_clauses: MissingClause[] = Array.isArray(parsed.missing_clauses)
+    ? (parsed.missing_clauses as unknown[]).flatMap((m) => {
+        if (typeof m === "object" && m !== null) {
+          const obj = m as Record<string, unknown>;
+          const clause = String(obj.clause ?? "").trim();
+          if (!clause) return [];
+          return [{ clause, importance: String(obj.importance ?? ""), risk: String(obj.risk ?? "") }];
+        }
+        return [];
+      })
+    : [];
+
+  // ── suggestions ───────────────────────────────────────────────────────────
+  const suggestions: Suggestion[] = Array.isArray(parsed.suggestions)
+    ? (parsed.suggestions as unknown[]).flatMap((s) => {
+        if (typeof s === "object" && s !== null) {
+          const obj = s as Record<string, unknown>;
+          const clause = String(obj.clause ?? "").trim();
+          if (!clause) return [];
+          return [{ clause, fix: String(obj.fix ?? "") }];
+        }
+        return [];
+      })
+    : [];
 
   // ── Metadata ──────────────────────────────────────────────────────────────
   const parties = Array.isArray(parsed.parties)
@@ -196,7 +280,111 @@ function parseLLMResponse(raw: string): LLMResult {
     jurisdiction,
     structured_risks: structuredRisks,
     structured_clauses: structuredClauses,
+    missing_clauses,
+    suggestions,
   };
+}
+
+// ── Policy evaluation ─────────────────────────────────────────────────────────
+
+interface Policy {
+  name: string;
+  category: string;
+  risk_level: "low" | "medium" | "high";
+  explanation: string;
+  check: (result: LLMResult) => boolean;
+}
+
+// Built-in policies — evaluated against the LLM result
+const BUILT_IN_POLICIES: Policy[] = [
+  {
+    name: "Missing Indemnification Clause",
+    category: "indemnification",
+    risk_level: "high",
+    explanation: "No indemnification clause found. Either party may be exposed to unlimited third-party claims without contractual protection.",
+    check: (r) => !r.clauses.some((c) => /indemni/i.test(c)) &&
+                   !r.structured_clauses.liability &&
+                   !r.missing_clauses.some((m) => /indemni/i.test(m.clause)),
+  },
+  {
+    name: "Missing Limitation of Liability",
+    category: "liability",
+    risk_level: "high",
+    explanation: "No limitation of liability clause detected. Damages could be uncapped — a significant financial exposure.",
+    check: (r) => !r.clauses.some((c) => /liabilit/i.test(c)) &&
+                   !r.structured_clauses.liability,
+  },
+  {
+    name: "Missing Termination Clause",
+    category: "termination",
+    risk_level: "medium",
+    explanation: "No termination clause found. Either party may be locked into the contract with no clear exit mechanism.",
+    check: (r) => !r.clauses.some((c) => /terminat/i.test(c)) &&
+                   !r.structured_clauses.termination,
+  },
+  {
+    name: "Missing Dispute Resolution",
+    category: "dispute",
+    risk_level: "medium",
+    explanation: "No dispute resolution or arbitration clause found. Disputes will default to litigation, which is costly and slow.",
+    check: (r) => !r.clauses.some((c) => /dispute|arbitrat|mediat/i.test(c)),
+  },
+  {
+    name: "Missing Governing Law / Jurisdiction",
+    category: "jurisdiction",
+    risk_level: "medium",
+    explanation: "No governing law or jurisdiction specified. In cross-border contracts this creates ambiguity about which courts and laws apply.",
+    check: (r) => !r.jurisdiction && !r.clauses.some((c) => /jurisdiction|governing law/i.test(c)),
+  },
+  {
+    name: "Missing Confidentiality Clause",
+    category: "confidentiality",
+    risk_level: "medium",
+    explanation: "No confidentiality or NDA clause found. Sensitive business information shared under this contract may not be protected.",
+    check: (r) => !r.clauses.some((c) => /confidential|nda|non-disclosure/i.test(c)),
+  },
+  {
+    name: "Missing Payment Terms",
+    category: "payment",
+    risk_level: "medium",
+    explanation: "No payment terms clause found. Without defined payment schedules and penalties, late or non-payment may go unaddressed.",
+    check: (r) => !r.clauses.some((c) => /payment|invoice|fee/i.test(c)) &&
+                   !r.structured_clauses.payment,
+  },
+  {
+    name: "Missing Intellectual Property Ownership",
+    category: "ip",
+    risk_level: "medium",
+    explanation: "No IP ownership clause detected. Work product or inventions created under this contract may have unclear ownership.",
+    check: (r) => !r.clauses.some((c) => /intellectual property|ip ownership|copyright|work for hire/i.test(c)),
+  },
+  {
+    name: "Missing Force Majeure",
+    category: "force_majeure",
+    risk_level: "low",
+    explanation: "No force majeure clause found. Parties may have no protection against liability for events outside their control.",
+    check: (r) => !r.clauses.some((c) => /force majeure|act of god|unforeseeable/i.test(c)),
+  },
+];
+
+function evaluatePolicies(result: LLMResult): StructuredRisk[] {
+  const triggered = BUILT_IN_POLICIES.filter((p) => p.check(result));
+
+  // Deduplicate against existing AI risks — skip if AI already flagged same category
+  const existingReasons = new Set(
+    result.structured_risks.map((r) => (r.clause ?? r.reason).toLowerCase())
+  );
+
+  return triggered
+    .filter((p) => {
+      const key = p.category.toLowerCase();
+      return !Array.from(existingReasons).some((r) => r.includes(key));
+    })
+    .map((p) => ({
+      level: p.risk_level,
+      reason: p.explanation,
+      clause: p.name,
+    }));
 }
 
 async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
@@ -502,7 +690,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(safeExit("LLM_ERROR", reason));
     }
 
-    console.log("[analyze] Done. risk_score:", result.risk_score, "clauses:", result.clauses.length);
+    // ── Policy evaluation — merge with AI risks ───────────────────────────────
+    const policyRisks = evaluatePolicies(result);
+    if (policyRisks.length > 0) {
+      console.log("[analyze] policy risks triggered:", policyRisks.length);
+      result.structured_risks = [...result.structured_risks, ...policyRisks];
+      result.risks = result.structured_risks.map((r) => `[${r.level}] ${r.reason}`);
+      // Recompute risk_score including policy risks
+      const RISK_SCORE: Record<string, number> = { high: 80, medium: 50, low: 20 };
+      result.risk_score = Math.round(
+        result.structured_risks.reduce((sum, r) => sum + (RISK_SCORE[r.level] ?? 50), 0) /
+        result.structured_risks.length
+      );
+    }
+
+    console.log("[analyze] Done. risk_score:", result.risk_score, "clauses:", result.clauses.length, "policy_risks:", policyRisks.length);
 
     return res.status(200).json({
       // ── Frontend-compat fields (flat) ──────────────────────────────────────
@@ -516,6 +718,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       jurisdiction: result.jurisdiction,
       structured_risks: result.structured_risks,
       structured_clauses: result.structured_clauses,
+      missing_clauses: result.missing_clauses,
+      suggestions: result.suggestions,
       // ── Metadata ──────────────────────────────────────────────────────────
       contract_id,
       filename: contract.filename ?? "",
