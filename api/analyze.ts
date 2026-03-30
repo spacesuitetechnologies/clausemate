@@ -228,7 +228,7 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
 
   const base64 = buffer.toString("base64");
 
-  const content =
+  const content: Array<Record<string, string>> =
     mimeType === "application/pdf"
       ? [
           { type: "input_text", text: "Extract all readable text from this PDF document." },
@@ -239,6 +239,9 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
           { type: "input_image", image_url: `data:${mimeType};base64,${base64}` },
         ];
 
+  console.log("[OCR CONTENT TYPES]", content.map(c => c.type));
+  console.log("[OCR CONTENT LENGTH]", content.length);
+
   if (!Array.isArray(content) || content.length !== 2) {
     throw new Error("INVALID OCR CONTENT STRUCTURE");
   }
@@ -248,15 +251,19 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
     input: [{ role: "user", content }],
   };
 
-  console.log("[AI OCR REAL REQUEST]", JSON.stringify(requestBody, null, 2));
+  const bodyString = JSON.stringify(requestBody);
+
+  console.log("====== FINAL OCR REQUEST ======");
+  console.log(bodyString);
+  console.log("================================");
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${openaiKey}`,
       "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: JSON.stringify(requestBody),
+    body: bodyString,
   });
 
   console.log("[AI OCR] status:", response.status);
