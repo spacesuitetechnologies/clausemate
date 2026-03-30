@@ -227,7 +227,7 @@ async function aiOCR(buffer: Buffer, mimeType: "application/pdf" | "image/jpeg" 
   const base64 = buffer.toString("base64");
   console.log("BASE64 LENGTH:", base64.length);
 
-  const content: Array<Record<string, string>> =
+  const content: any[] =
     mimeType === "application/pdf"
       ? [
           { type: "input_text", text: "Extract all readable text from this PDF document." },
