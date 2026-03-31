@@ -24,6 +24,7 @@ import {
   Lightbulb,
   Copy,
   ClipboardCheck,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -505,6 +506,106 @@ function UploadContent() {
         [index]: { text: "", loading: false, error: "Network error", expanded: false },
       }));
     }
+  }
+
+  async function downloadFixedContract() {
+    if (!directResult) return;
+
+    const generated = Object.entries(generatedClauses).filter(([, g]) => g.text);
+    const filename = file?.name ?? "contract";
+    const baseName = filename.replace(/\.[^.]+$/, "");
+
+    const lines: string[] = [];
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    lines.push("=".repeat(60));
+    lines.push("CONTRACT IMPROVEMENTS REPORT");
+    lines.push(`Source file: ${filename}`);
+    lines.push(`Generated:   ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`);
+    lines.push("=".repeat(60));
+    lines.push("");
+
+    // ── Original file text (txt only) ─────────────────────────────────────────
+    if (file && file.name.toLowerCase().endsWith(".txt")) {
+      try {
+        const originalText = await file.text();
+        lines.push("ORIGINAL CONTRACT");
+        lines.push("-".repeat(40));
+        lines.push(originalText.trim());
+        lines.push("");
+        lines.push("=".repeat(60));
+        lines.push("");
+      } catch {
+        // skip if unreadable
+      }
+    }
+
+    // ── Summary ───────────────────────────────────────────────────────────────
+    if (directResult.summary) {
+      lines.push("ANALYSIS SUMMARY");
+      lines.push("-".repeat(40));
+      lines.push(directResult.summary);
+      lines.push("");
+    }
+
+    // ── Risk score ────────────────────────────────────────────────────────────
+    if (directResult.risk_score != null) {
+      const label = directResult.risk_score >= 70 ? "HIGH" : directResult.risk_score >= 40 ? "MEDIUM" : "LOW";
+      lines.push(`Risk Score: ${directResult.risk_score}/100 (${label})`);
+      lines.push("");
+    }
+
+    // ── Identified risks ──────────────────────────────────────────────────────
+    if (directResult.risks.length > 0) {
+      lines.push("IDENTIFIED RISKS");
+      lines.push("-".repeat(40));
+      directResult.risks.forEach((r) => lines.push(`• ${r}`));
+      lines.push("");
+    }
+
+    // ── Missing clauses ───────────────────────────────────────────────────────
+    if ((directResult.missing_clauses?.length ?? 0) > 0) {
+      lines.push("MISSING CLAUSES");
+      lines.push("-".repeat(40));
+      directResult.missing_clauses!.forEach((m) => {
+        lines.push(`• ${m.clause}`);
+        if (m.importance) lines.push(`  Importance: ${m.importance}`);
+        if (m.risk)       lines.push(`  Risk: ${m.risk}`);
+      });
+      lines.push("");
+    }
+
+    // ── Generated clauses ─────────────────────────────────────────────────────
+    if (generated.length > 0) {
+      lines.push("=".repeat(60));
+      lines.push("SUGGESTED CLAUSE ADDITIONS");
+      lines.push("=".repeat(60));
+      lines.push("Insert the following clauses into the relevant sections of the original contract.");
+      lines.push("");
+
+      generated.forEach(([idxStr, g]) => {
+        const idx = Number(idxStr);
+        const suggestion = directResult.suggestions?.[idx];
+        const clauseName = suggestion?.clause ?? `Clause ${idx + 1}`;
+        lines.push(`[ ${clauseName.toUpperCase()} ]`);
+        lines.push("-".repeat(40));
+        lines.push(g.text);
+        lines.push("");
+      });
+    }
+
+    lines.push("=".repeat(60));
+    lines.push("NOTE: This report is AI-generated based on common Indian contract standards.");
+    lines.push("It does not constitute legal advice. Consult a qualified lawyer before use.");
+    lines.push("=".repeat(60));
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}_improvements.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const estimated = estimateCost(1, includeRedlines, 6);
@@ -1144,15 +1245,33 @@ function UploadContent() {
 
           {/* View reports link after results */}
           {phase === "results" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-[12px]"
-              onClick={() => setLocation("/reports")}
-              data-testid="view-reports-btn"
-            >
-              View all reports
-            </Button>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-[12px]"
+                onClick={() => setLocation("/reports")}
+                data-testid="view-reports-btn"
+              >
+                View all reports
+              </Button>
+              {directResult && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-[12px] gap-1.5"
+                  onClick={downloadFixedContract}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Improvements Report
+                  {Object.values(generatedClauses).filter((g) => g.text).length > 0 && (
+                    <span className="ml-auto text-[10px] font-semibold text-primary/60 bg-primary/8 px-1.5 py-0.5 rounded-full border border-primary/15">
+                      {Object.values(generatedClauses).filter((g) => g.text).length} clause{Object.values(generatedClauses).filter((g) => g.text).length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
