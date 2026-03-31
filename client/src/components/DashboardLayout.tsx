@@ -46,24 +46,28 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           {navItems.map((item) => {
             const active = location === item.path;
             return (
-              <Link key={item.path} href={item.path}>
-                <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${active ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}>
-                  <item.icon className="h-[18px] w-[18px] shrink-0" />
-                  {item.label}
-                </div>
-              </Link>
+              <>
+                <Link key={item.path} href={item.path}>
+                  <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${active ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}>
+                    <item.icon className="h-[18px] w-[18px] shrink-0" />
+                    {item.label}
+                  </div>
+                </Link>
+                {/* Insert Create Contract after Upload Contract */}
+                {item.path === "/upload" && (
+                  <Link href="/create-contract">
+                    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${location === "/create-contract" ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid="nav-create-contract">
+                      <FileSignature className="h-[18px] w-[18px] shrink-0" />
+                      <span className="flex-1">Create Contract</span>
+                      {credits.plan_id === "free" && (
+                        <span className="text-[9px] font-semibold text-primary/70 bg-primary/8 px-1.5 py-0.5 rounded-full border border-primary/15 leading-tight">PRO</span>
+                      )}
+                    </div>
+                  </Link>
+                )}
+              </>
             );
           })}
-          {/* Create Contract — Pro feature */}
-          <Link href="/create-contract">
-            <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${location === "/create-contract" ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid="nav-create-contract">
-              <FileSignature className="h-[18px] w-[18px] shrink-0" />
-              <span className="flex-1">Create Contract</span>
-              {credits.plan_id === "free" && (
-                <span className="text-[9px] font-semibold text-primary/70 bg-primary/8 px-1.5 py-0.5 rounded-full border border-primary/15 leading-tight">PRO</span>
-              )}
-            </div>
-          </Link>
         </nav>
 
         <div className="shrink-0 px-3 pb-4 space-y-2 border-t border-border/40 pt-3">

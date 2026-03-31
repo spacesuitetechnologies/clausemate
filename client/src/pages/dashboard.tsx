@@ -44,7 +44,7 @@ function DashboardContent() {
   const { data: contracts = [], isLoading: contractsLoading } = useContracts();
 
   return (
-    <div className="max-w-[960px] space-y-7">
+    <div className="w-full max-w-[960px] mx-auto space-y-7">
       <div>
         <h1 className="text-xl font-semibold mb-1">
           Welcome back, {user?.name?.split(" ")[0] || "Counsel"}
