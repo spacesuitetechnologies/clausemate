@@ -28,7 +28,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#071428]/90 backdrop-blur-md border-b border-white/[0.08]">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#05070a]/90 backdrop-blur-md border-b border-white/[0.07]">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
         <Link href="/dashboard" className="flex items-center gap-1.5 transition-all duration-200 hover:opacity-90">
           <img
@@ -62,7 +62,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-/* ── Hero — split layout with live product preview ── */
+/* ── Hero — dark premium split layout ── */
 function HeroSection({ onTryFree }: { onTryFree: () => void }) {
   const [phase, setPhase] = useState(0);
 
@@ -79,112 +79,121 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
   }, []);
 
   return (
-    <section className="hero-gradient-light min-h-screen flex items-center px-4 sm:px-6 relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 45%, rgba(255,255,255,0.07) 0%, transparent 70%)" }} />
+    <section className="bg-[#05070a] text-white min-h-screen flex items-center relative overflow-hidden">
 
-      <div className="max-w-6xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center py-24 relative z-10">
+      {/* Ambient glows */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-purple-500/10 blur-[120px] rounded-full" />
+      </div>
 
-        {/* ── Left: text block ── */}
-        <div className="max-w-xl">
+      <div className="relative z-10 w-full max-w-6xl mx-auto px-6 py-24 grid grid-cols-1 md:grid-cols-2 gap-14 items-center">
+
+        {/* ── Left: text ── */}
+        <div>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
-            className="text-[10px] sm:text-xs uppercase tracking-[0.18em] font-medium mb-4 bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+            className="text-[10px] sm:text-xs uppercase tracking-[0.18em] font-medium mb-5 bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
             AI-Powered Contract Analysis · Built for Indian Law
           </motion.p>
 
           <motion.h1
             initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.05 }}
-            className="font-display text-[1.8rem] sm:text-[2.6rem] leading-[1.1] mb-4 text-white"
+            className="text-4xl sm:text-5xl md:text-[3.4rem] font-semibold tracking-tight leading-[1.1] mb-5"
           >
             Upload a contract.{" "}
-            <span className="text-sky-100">Know the risks instantly.</span>
+            <span className="text-white/45">Know the risks instantly.</span>
           </motion.h1>
 
           <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.12 }}
-            className="text-[13px] sm:text-[15px] text-white/60 leading-relaxed mb-7">
+            className="text-[14px] sm:text-[15px] text-white/55 leading-relaxed mb-8 max-w-md">
             Instantly detect risks, missing clauses, and hidden liabilities in any contract — built for Indian law.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}>
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="flex flex-col sm:flex-row gap-3">
             <Button size="lg" onClick={onTryFree}
-              className="px-8 h-11 text-[13px] btn-glass-override relative overflow-hidden no-default-hover-elevate [animation:floatSlow_4s_ease-in-out_infinite]"
+              className="px-8 h-11 text-[13px] font-medium btn-hero-primary no-default-hover-elevate"
               data-testid="hero-try-free-btn">
-              <span className="absolute inset-0 overflow-hidden pointer-events-none"><span className="light-sweep" /></span>
-              <span className="relative z-10 flex items-center">Analyze Contract <ArrowRight className="ml-2 h-4 w-4" /></span>
+              Analyze Contract <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
+            <button
+              onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
+              className="px-7 h-11 text-[13px] font-medium rounded-md bg-white/8 border border-white/10 text-white hover:bg-white/14 transition-colors"
+              data-testid="hero-see-demo-btn">
+              See How It Works
+            </button>
           </motion.div>
         </div>
 
         {/* ── Right: product preview ── */}
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="bg-white/5 border border-white/10 rounded-xl shadow-2xl p-5 backdrop-blur-md relative overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.7, delay: 0.35 }}
+          className="relative">
 
-          {/* Fake doc header */}
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-[12px] text-white/60 font-mono">Service_Agreement.pdf</span>
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 bg-red-400 rounded-full" />
-              <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full" />
-              <div className="w-2.5 h-2.5 bg-green-400 rounded-full" />
+          {/* Glow border behind the card */}
+          <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-br from-blue-500/25 via-transparent to-purple-500/25 blur-xl -z-10" />
+
+          <div className="rotate-[1deg] hover:rotate-0 transition-all duration-500 bg-white/[0.04] border border-white/10 rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl p-5">
+
+            {/* Doc header */}
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] text-white/50 font-mono">Service_Agreement.pdf</span>
+              <div className="flex gap-1.5">
+                <div className="w-2 h-2 bg-red-400/80 rounded-full" />
+                <div className="w-2 h-2 bg-yellow-400/80 rounded-full" />
+                <div className="w-2 h-2 bg-green-400/80 rounded-full" />
+              </div>
             </div>
-          </div>
 
-          {/* Skeleton lines — always visible as "document text" */}
-          <div className="space-y-2 mb-5">
-            <div className="h-1.5 bg-white/10 rounded animate-pulse w-3/4" />
-            <div className="h-1.5 bg-white/10 rounded animate-pulse w-5/6" />
-            <div className="h-1.5 bg-white/10 rounded animate-pulse w-2/3" />
-            <div className="h-1.5 bg-white/8 rounded w-4/5" />
-            <div className="h-1.5 bg-white/8 rounded w-1/2" />
-          </div>
+            {/* Skeleton lines */}
+            <div className="space-y-2 mb-4">
+              <div className="h-1.5 bg-white/10 rounded animate-pulse w-3/4" />
+              <div className="h-1.5 bg-white/10 rounded animate-pulse w-5/6" />
+              <div className="h-1.5 bg-white/10 rounded animate-pulse w-2/3" />
+              <div className="h-1.5 bg-white/[0.06] rounded w-4/5" />
+              <div className="h-1.5 bg-white/[0.06] rounded w-1/2" />
+            </div>
 
-          {/* Risk detection card */}
-          <AnimatePresence>
-            {phase >= 1 && (
-              <motion.div key="risk"
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
-                className="bg-white/5 border border-orange-400/30 rounded-lg p-4 mb-3">
-                <p className="text-[11px] text-orange-300 mb-2 font-medium">⚠ Risk Detected · Section 14.2</p>
-                <p className="text-[12px] text-white/75 leading-snug">
-                  Unilateral termination rights without notice period detected.
-                </p>
-                <div className="mt-2.5 flex gap-2">
-                  <span className="text-[10px] bg-orange-400/20 text-orange-300 px-2 py-0.5 rounded font-medium">Liability</span>
-                  <span className="text-[10px] bg-sky-400/20 text-sky-300 px-2 py-0.5 rounded font-medium">Fix Suggested</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            {/* Risk card */}
+            <AnimatePresence>
+              {phase >= 1 && (
+                <motion.div key="risk"
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }} transition={{ duration: 0.45 }}
+                  className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-3">
+                  <p className="text-[11px] text-red-300 font-medium mb-1.5">⚠ Risk Detected · Section 14.2</p>
+                  <p className="text-[12px] text-white/70 leading-snug">
+                    Unilateral termination rights without notice period detected.
+                  </p>
+                  <div className="mt-2.5 flex gap-2">
+                    <span className="text-[10px] bg-red-400/15 text-red-300 px-2 py-0.5 rounded font-medium">Liability</span>
+                    <span className="text-[10px] bg-blue-400/15 text-blue-300 px-2 py-0.5 rounded font-medium">Fix Suggested</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Summary card */}
-          <AnimatePresence>
-            {phase >= 2 && (
-              <motion.div key="summary"
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
-                className="bg-white/5 border border-white/10 rounded-lg p-4">
-                <p className="text-[11px] text-white/50 uppercase tracking-wider mb-3">Legal Analysis Summary</p>
-                <div className="flex justify-around text-center">
-                  <div><p className="text-red-400 font-semibold text-base">03</p><p className="text-[10px] text-white/50 mt-0.5">High Risks</p></div>
-                  <div><p className="text-yellow-400 font-semibold text-base">12</p><p className="text-[10px] text-white/50 mt-0.5">Clauses</p></div>
-                  <div><p className="text-white font-semibold text-base">01</p><p className="text-[10px] text-white/50 mt-0.5">Missing</p></div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            {/* Summary card */}
+            <AnimatePresence>
+              {phase >= 2 && (
+                <motion.div key="summary"
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }} transition={{ duration: 0.45 }}
+                  className="bg-white/[0.04] border border-white/10 rounded-lg p-4">
+                  <p className="text-[10px] text-white/40 uppercase tracking-wider mb-3">Legal Analysis Summary</p>
+                  <div className="flex justify-around text-center">
+                    <div><p className="text-red-400 font-semibold text-[18px]">03</p><p className="text-[10px] text-white/40 mt-0.5">High Risks</p></div>
+                    <div><p className="text-yellow-400 font-semibold text-[18px]">12</p><p className="text-[10px] text-white/40 mt-0.5">Clauses</p></div>
+                    <div><p className="text-white/80 font-semibold text-[18px]">01</p><p className="text-[10px] text-white/40 mt-0.5">Missing</p></div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* See how it works */}
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
-              className="text-[12px] text-white/50 hover:text-white/80 transition-colors"
-              data-testid="hero-see-demo-btn">
-              See How It Works →
-            </button>
           </div>
         </motion.div>
 

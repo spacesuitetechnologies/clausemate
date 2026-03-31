@@ -218,6 +218,24 @@
   pointer-events: none;
 }
 
+/* ─── Hero primary button (dark hero — white bg, black text) ─── */
+.btn-hero-primary {
+  background: #ffffff !important;
+  color: #0a0a0a !important;
+  animation: none !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3) !important;
+  transition: background 0.2s ease, transform 0.2s ease !important;
+}
+.btn-hero-primary:hover:not(:disabled) {
+  background: rgba(255,255,255,0.88) !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+}
+.btn-hero-primary:active:not(:disabled) {
+  transform: scale(0.985) !important;
+}
+
 /* ─── Button float animation ─── */
 @keyframes floatSlow {
   0%, 100% { transform: translateY(0px); }
