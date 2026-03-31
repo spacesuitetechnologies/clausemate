@@ -28,7 +28,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#071428]/90 backdrop-blur-md border-b border-white/[0.08]">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
         <Link href="/dashboard" className="flex items-center gap-1 transition-all duration-200 hover:opacity-90">
           <img
@@ -62,8 +62,10 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
 /* ── Hero — full animated gradient background, no box behind title ── */
 function HeroSection({ onTryFree }: { onTryFree: () => void }) {
   return (
-    <section className="hero-gradient-light min-h-screen flex items-center px-4 sm:px-6">
-      <div className="max-w-[700px] mx-auto text-center">
+    <section className="hero-gradient-light min-h-screen flex items-center px-4 sm:px-6 relative overflow-hidden">
+      {/* Radial depth overlay — softens flat blue, adds center luminance */}
+      <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 45%, rgba(255,255,255,0.07) 0%, transparent 70%)" }} />
+      <div className="max-w-[700px] mx-auto text-center relative z-10">
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
           className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/60 font-medium mb-4 sm:mb-5">
           AI-Powered Contract Analysis · Built for Indian Law
@@ -76,7 +78,7 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
           className="font-display text-[1.8rem] sm:text-[2.4rem] md:text-[3rem] leading-[1.1] mb-4 sm:mb-5 text-white"
         >
           Upload a contract.{" "}
-          <span className="text-sky-300">Know the risks instantly.</span>
+          <span className="text-sky-100">Know the risks instantly.</span>
         </motion.h1>
 
         <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.12 }}
@@ -86,7 +88,7 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
 
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-8 h-11 text-[13px] shadow-[0_4px_24px_rgba(56,189,248,0.45)]" data-testid="hero-try-free-btn">
+          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-8 h-11 text-[13px] shadow-[0_6px_30px_rgba(56,189,248,0.55)] hover:shadow-[0_8px_36px_rgba(56,189,248,0.65)]" data-testid="hero-try-free-btn">
             Analyze Contract <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button variant="outline" size="lg" onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
