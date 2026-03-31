@@ -13,6 +13,7 @@ import SettingsPage from "@/pages/settings";
 import WhoIsThisForPage from "@/pages/who-is-this-for";
 import LegalPage from "@/pages/legal";
 import NotFound from "@/pages/not-found";
+import CreateContractPage from "@/pages/create-contract";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isInitializing } = useAuth();
@@ -34,6 +35,7 @@ function AppRoutes() {
       <Route path="/reports"><ProtectedRoute component={ReportsPage} /></Route>
       <Route path="/billing"><ProtectedRoute component={BillingPage} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
+      <Route path="/create-contract"><ProtectedRoute component={CreateContractPage} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

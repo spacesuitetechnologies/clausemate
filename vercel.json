@@ -9,6 +9,9 @@
     },
     "api/generate-clause.ts": {
       "maxDuration": 30
+    },
+    "api/generate-contract.ts": {
+      "maxDuration": 60
     }
   }
 }

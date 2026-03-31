@@ -508,6 +508,77 @@ function UploadContent() {
     }
   }
 
+  function downloadUpdatedContract() {
+    if (!directResult?.contract_text) return;
+
+    const generated = Object.entries(generatedClauses).filter(([, g]) => g.text);
+    const baseName = (file?.name ?? "contract").replace(/\.[^.]+$/, "");
+
+    // Split original into lines for section-aware insertion
+    const lines = directResult.contract_text.split("\n");
+    const insertedAt = new Set<number>();
+
+    // For each generated clause, try to find a matching section heading in the original
+    const pendingInserts: { afterLine: number; text: string; label: string }[] = [];
+
+    generated.forEach(([idxStr, g]) => {
+      const idx = Number(idxStr);
+      const clauseName = directResult.suggestions?.[idx]?.clause ?? "";
+      if (!clauseName) return;
+
+      // Look for a line that mentions the clause name (case-insensitive)
+      const pattern = new RegExp(clauseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const matchLine = lines.findIndex((l) => pattern.test(l));
+
+      if (matchLine !== -1 && !insertedAt.has(matchLine)) {
+        insertedAt.add(matchLine);
+        // Find the end of that section (next blank line or heading after it)
+        let insertAfter = matchLine;
+        for (let i = matchLine + 1; i < lines.length; i++) {
+          if (/^[A-Z\d][\w\s]{0,40}:?\s*$/.test(lines[i].trim()) && lines[i].trim().length > 0) break;
+          insertAfter = i;
+        }
+        pendingInserts.push({ afterLine: insertAfter, label: clauseName, text: g.text });
+      } else {
+        // No match — mark for append
+        pendingInserts.push({ afterLine: lines.length - 1, label: clauseName, text: g.text });
+      }
+    });
+
+    // Build output, inserting generated clauses at resolved positions
+    const output: string[] = [];
+    const insertMap = new Map<number, { label: string; text: string }[]>();
+    pendingInserts.forEach(({ afterLine, label, text }) => {
+      if (!insertMap.has(afterLine)) insertMap.set(afterLine, []);
+      insertMap.get(afterLine)!.push({ label, text });
+    });
+
+    lines.forEach((line, i) => {
+      output.push(line);
+      if (insertMap.has(i)) {
+        insertMap.get(i)!.forEach(({ label, text }) => {
+          output.push("");
+          output.push(`--- [ADDED] ${label.toUpperCase()} ---`);
+          output.push(text);
+          output.push(`--- [END] ${label.toUpperCase()} ---`);
+        });
+      }
+    });
+
+    output.push("");
+    output.push("_".repeat(60));
+    output.push("AI-generated clause additions. Not legal advice.");
+    output.push("Clausemate · " + new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }));
+
+    const blob = new Blob([output.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}_updated.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function downloadFixedContract() {
     if (!directResult) return;
 
@@ -1269,6 +1340,16 @@ function UploadContent() {
                       {Object.values(generatedClauses).filter((g) => g.text).length} clause{Object.values(generatedClauses).filter((g) => g.text).length !== 1 ? "s" : ""}
                     </span>
                   )}
+                </Button>
+              )}
+              {directResult?.contract_text && Object.values(generatedClauses).some((g) => g.text) && (
+                <Button
+                  size="sm"
+                  className="w-full text-[12px] gap-1.5"
+                  onClick={downloadUpdatedContract}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Updated Contract
                 </Button>
               )}
             </div>

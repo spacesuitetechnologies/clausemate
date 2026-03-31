@@ -725,6 +725,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       filename: contract.filename ?? "",
       was_trimmed: extractedText.length > MAX_TEXT_CHARS,
       include_redlines,
+      contract_text: trimmedText,
     });
 
   } catch (err: unknown) {

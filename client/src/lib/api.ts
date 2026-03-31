@@ -338,6 +338,7 @@ export interface AnalyzeContractResult {
   risk_score?: number | null;
   missing_clauses?: MissingClause[];
   suggestions?: Suggestion[];
+  contract_text?: string;
   error?: string;
   parse_fail_reason?: string;
 }
