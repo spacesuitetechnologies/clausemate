@@ -30,14 +30,14 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
-        <Link href="/dashboard" className="flex items-center gap-1.5 transition-all duration-200 hover:opacity-90">
+        <Link href="/dashboard" className="flex items-center gap-1 transition-all duration-200 hover:opacity-90">
           <img
             src="/clausemate/mainlogo.png"
             alt="Clausemate"
-            className="h-8 w-auto object-contain"
+            className="h-7 w-auto object-contain"
           />
-          <span className="text-white font-semibold text-[15px] tracking-tight">
-            clausemate<span className="text-blue-400">.ai</span>
+          <span className="text-white font-semibold text-[14px] tracking-tight leading-none">
+            clausemate<span className="text-sky-400">.ai</span>
           </span>
         </Link>
         <div className="hidden md:flex items-center gap-8">
@@ -52,7 +52,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onLogin} className="text-[13px] text-white hover:bg-white/10" data-testid="nav-login-btn">Sign In</Button>
-          <Button size="sm" onClick={onLogin} className="text-[13px] px-5" data-testid="nav-try-free-btn">Get Started</Button>
+          <Button size="sm" onClick={onLogin} className="text-[13px] px-5" data-testid="nav-try-free-btn">Analyze Free</Button>
         </div>
       </div>
     </nav>
@@ -65,34 +65,33 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
     <section className="hero-gradient-light min-h-screen flex items-center px-4 sm:px-6">
       <div className="max-w-[700px] mx-auto text-center">
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
-          className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/70 font-medium mb-4 sm:mb-6">
-          AI-Powered Contract Intelligence
+          className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/60 font-medium mb-4 sm:mb-5">
+          AI-Powered Contract Analysis · Built for Indian Law
         </motion.p>
 
         <motion.h1
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.05 }}
-          className="font-display text-[1.8rem] sm:text-[2.4rem] md:text-[3rem] leading-[1.1] mb-4 sm:mb-6 text-white"
+          className="font-display text-[1.8rem] sm:text-[2.4rem] md:text-[3rem] leading-[1.1] mb-4 sm:mb-5 text-white"
         >
-          Protect your interests <br />
-          by investing in{" "}
-          <span className="text-sky-300">professional review</span>
+          Upload a contract.{" "}
+          <span className="text-sky-300">Know the risks instantly.</span>
         </motion.h1>
 
         <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.12 }}
-          className="text-[13px] sm:text-[15px] text-white/60 leading-relaxed max-w-[480px] mx-auto mb-6 sm:mb-9 px-2 sm:px-0">
-          Gain clarity, reduce risk, and make confident decisions with AI-powered contract analysis built for Indian law.
+          className="text-[13px] sm:text-[15px] text-white/60 leading-relaxed max-w-[460px] mx-auto mb-6 sm:mb-8 px-2 sm:px-0">
+          Instantly detect risks, missing clauses, and hidden liabilities in any contract — built for Indian law.
         </motion.p>
 
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-7 h-11 text-[13px]" data-testid="hero-try-free-btn">
-            Get Started <ArrowRight className="ml-2 h-4 w-4" />
+          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-8 h-11 text-[13px] shadow-[0_4px_24px_rgba(56,189,248,0.45)]" data-testid="hero-try-free-btn">
+            Analyze Contract <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button variant="outline" size="lg" onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
             className="w-full sm:w-auto px-7 h-11 text-[13px] border-white/30 text-white hover:bg-white/10" data-testid="hero-see-demo-btn">
-            View Platform
+            See How It Works
           </Button>
         </motion.div>
       </div>
@@ -156,9 +155,9 @@ function WhoIsThisForSection() {
   const isInView = useInView(ref, { once: true, margin: "-60px" });
 
   const cardColors = [
-    { icon: "text-blue-600", bg: "bg-blue-50", border: "hover:border-blue-200" },
-    { icon: "text-sky-600", bg: "bg-sky-50", border: "hover:border-sky-200" },
-    { icon: "text-indigo-600", bg: "bg-indigo-50", border: "hover:border-indigo-200" },
+    { icon: "text-white", gradient: "from-blue-500 to-indigo-500", border: "hover:border-blue-200", shadow: "shadow-blue-200" },
+    { icon: "text-white", gradient: "from-sky-400 to-cyan-500", border: "hover:border-sky-200", shadow: "shadow-sky-200" },
+    { icon: "text-white", gradient: "from-purple-500 to-pink-500", border: "hover:border-purple-200", shadow: "shadow-purple-200" },
   ];
 
   return (
@@ -177,7 +176,7 @@ function WhoIsThisForSection() {
               transition={{ duration: 0.4 }}
               className={`group rounded-xl border border-border bg-white p-7 pb-12 relative transition-all duration-200 ${cardColors[i].border} hover:shadow-md cursor-default`}
             >
-              <div className={`h-10 w-10 rounded-lg ${cardColors[i].bg} flex items-center justify-center mb-5`}>
+              <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${cardColors[i].gradient} flex items-center justify-center mb-5 shadow-sm ${cardColors[i].shadow}`}>
                 <div className={cardColors[i].icon}><a.icon /></div>
               </div>
               <h3 className="text-[14px] font-bold tracking-wide mb-3 text-foreground">
@@ -204,7 +203,7 @@ function MissionSection() {
       <motion.p initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5 }}
         className="max-w-[560px] mx-auto text-lg md:text-xl text-foreground/80 leading-relaxed relative z-10">
         Our mission is to help businesses and professionals understand their contracts with{" "}
-        <span className="text-foreground font-medium">AI-powered analysis and clear, actionable insights</span>{" "}
+        <span className="highlight-animated text-foreground font-medium">AI-powered analysis and clear, actionable insights</span>{" "}
         — so they can sign with confidence.
       </motion.p>
       <div className="watermark absolute inset-x-0 bottom-[-0.15em] text-center z-0 select-none" aria-hidden>clausemate</div>

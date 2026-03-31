@@ -94,7 +94,11 @@ function BillingContent() {
             const isCurrent = credits.plan_id === plan.id;
             return (
               <motion.div key={plan.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                className={`relative rounded-xl border p-5 bg-white ${plan.popular ? "border-primary shadow-md" : "border-border"} ${isCurrent ? "ring-1 ring-primary/30" : ""}`}>
+                className={`relative rounded-xl border p-5 bg-white cursor-default transition-all duration-300 ease-out ${
+                  plan.popular
+                    ? "border-primary shadow-md hover:scale-[1.02] hover:shadow-[0_12px_32px_rgba(59,130,246,0.18)]"
+                    : "border-border hover:-translate-y-1 hover:border-blue-400 hover:shadow-[0_10px_30px_rgba(59,130,246,0.12)]"
+                } ${isCurrent ? "ring-1 ring-primary/30" : ""}`}>
                 {plan.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2"><span className="text-[10px] uppercase tracking-wider font-semibold text-white bg-primary px-2.5 py-0.5 rounded-full">Recommended</span></div>}
                 <p className="text-[13px] font-semibold">{plan.name}</p>
                 <div className="flex items-baseline gap-0.5 mt-2"><span className="text-xl font-semibold">{formatPrice(plan.monthly_price)}</span>{plan.monthly_price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}</div>
