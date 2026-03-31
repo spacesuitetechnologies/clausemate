@@ -218,58 +218,6 @@
   pointer-events: none;
 }
 
-/* ─── Comet animation ─── */
-@keyframes cometMove {
-  0%   { transform: translateX(0) translateY(0) rotate(25deg); opacity: 0; }
-  10%  { opacity: 0.4; }
-  50%  { transform: translateX(60vw) translateY(-30px) rotate(25deg) scale(1.05); opacity: 0.28; }
-  100% { transform: translateX(120vw) translateY(-60px) rotate(25deg); opacity: 0; }
-}
-
-.comet {
-  position: absolute;
-  top: 15%;
-  left: -10%;
-  width: 140px;
-  height: 3px;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0.9)  0%,
-    rgba(255,255,255,0.55) 20%,
-    rgba(255,255,255,0.15) 55%,
-    rgba(255,255,255,0)    100%
-  );
-  border-radius: 999px;
-  filter: blur(0.6px);
-  opacity: 0;
-  animation: cometMove 7s linear infinite;
-}
-
-.comet::before {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
-  background: rgba(255,255,255,0.95);
-  border-radius: 50%;
-  box-shadow:
-    0 0 8px  rgba(255,255,255,0.8),
-    0 0 16px rgba(255,255,255,0.4);
-}
-
-.comet-delay {
-  top: 65%;
-  animation-delay: 3.5s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .comet { animation: none; display: none; }
-}
-
 /* ─── Button float animation ─── */
 @keyframes floatSlow {
   0%, 100% { transform: translateY(0px); }
