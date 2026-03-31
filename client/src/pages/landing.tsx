@@ -30,12 +30,14 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <img
-            src="/clausemate/mainlogo.png"
-            alt="Clausemate"
-            className="h-8 w-auto object-contain"
-          />
+        <Link href="/dashboard" className="flex items-center gap-3 transition-all hover:scale-[1.02]">
+          <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl px-2 py-1 shadow-md">
+            <img
+              src="/clausemate/mainlogo.png"
+              alt="Clausemate"
+              className="h-8 w-auto object-contain"
+            />
+          </div>
           <span className="text-white font-semibold text-[15px] tracking-tight">
             clausemate<span className="text-blue-400">.ai</span>
           </span>
