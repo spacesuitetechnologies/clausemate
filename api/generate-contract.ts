@@ -33,22 +33,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── Input ─────────────────────────────────────────────────────────────────
   const body = (req.body ?? {}) as Record<string, unknown>;
   const type        = typeof body.type        === "string" ? body.type.trim()        : "";
-  const partyA      = typeof body.partyA      === "string" ? body.partyA.trim()      : "";
-  const partyB      = typeof body.partyB      === "string" ? body.partyB.trim()      : "";
   const description = typeof body.description === "string" ? body.description.trim() : "";
-  const extraFields = (typeof body.extra_fields === "object" && body.extra_fields !== null)
-    ? body.extra_fields as Record<string, unknown>
-    : {};
 
-  if (!type || !partyA || !partyB || !description) {
-    return res.status(400).json({ error: "type, partyA, partyB, and description are required" });
+  if (!type || !description) {
+    return res.status(400).json({ error: "type and description are required" });
   }
 
-  // ── Build extra fields section ────────────────────────────────────────────
-  const extraLines = Object.entries(extraFields)
-    .filter(([, v]) => v !== "" && v != null)
-    .map(([k, v]) => `- ${k}: ${v}`)
-    .join("\n");
+  // Support both wizard format (answers) and legacy format (partyA/partyB/extra_fields)
+  let partyA = "";
+  let partyB = "";
+  let extraLines = "";
+
+  if (typeof body.answers === "object" && body.answers !== null) {
+    // New wizard format
+    const answers = body.answers as Record<string, string>;
+    partyA = (answers.party_a ?? "").trim();
+    partyB = (answers.party_b ?? "").trim();
+    extraLines = Object.entries(answers)
+      .filter(([k]) => k !== "party_a" && k !== "party_b")
+      .filter(([, v]) => typeof v === "string" && v.trim())
+      .map(([k, v]) => `- ${k.replace(/_/g, " ")}: ${v}`)
+      .join("\n");
+  } else {
+    // Legacy format
+    partyA = typeof body.partyA === "string" ? body.partyA.trim() : "";
+    partyB = typeof body.partyB === "string" ? body.partyB.trim() : "";
+    const extraFields = (typeof body.extra_fields === "object" && body.extra_fields !== null)
+      ? body.extra_fields as Record<string, unknown>
+      : {};
+    extraLines = Object.entries(extraFields)
+      .filter(([, v]) => v !== "" && v != null)
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join("\n");
+  }
+
+  if (!partyA || !partyB) {
+    return res.status(400).json({ error: "Party A and Party B names are required" });
+  }
 
   const prompt = `You are an expert Indian contract lawyer. Draft a complete, professionally structured ${type} between the parties below.
 

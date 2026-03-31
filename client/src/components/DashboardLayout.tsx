@@ -48,7 +48,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             return (
               <>
                 <Link key={item.path} href={item.path}>
-                  <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${active ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}>
+                  <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-all duration-200 ${active ? "bg-primary/8 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted hover:shadow-sm hover:scale-[1.02]"}`} data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}>
                     <item.icon className="h-[18px] w-[18px] shrink-0" />
                     {item.label}
                   </div>
@@ -56,7 +56,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 {/* Insert Create Contract after Upload Contract */}
                 {item.path === "/upload" && (
                   <Link href="/create-contract">
-                    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors duration-150 ${location === "/create-contract" ? "bg-primary/8 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"}`} data-testid="nav-create-contract">
+                    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-all duration-200 ${location === "/create-contract" ? "bg-primary/8 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted hover:shadow-sm hover:scale-[1.02]"}`} data-testid="nav-create-contract">
                       <FileSignature className="h-[18px] w-[18px] shrink-0" />
                       <span className="flex-1">Create Contract</span>
                       {credits.plan_id === "free" && (

@@ -13,12 +13,16 @@ function StatCard({
   value,
   sub,
   delay,
+  iconColor = "text-primary/60",
+  iconBg = "bg-primary/8",
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   sub?: string;
   delay: number;
+  iconColor?: string;
+  iconBg?: string;
 }) {
   return (
     <motion.div
@@ -28,7 +32,9 @@ function StatCard({
       className="rounded-xl border border-border bg-white p-5"
     >
       <div className="flex items-center gap-2.5 mb-3">
-        <Icon className="h-4 w-4 text-primary/60" />
+        <div className={`p-1.5 rounded-lg ${iconBg}`}>
+          <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+        </div>
         <span className="text-[11px] text-muted-foreground font-medium">{label}</span>
       </div>
       <p className="text-2xl font-semibold">{value}</p>
@@ -59,6 +65,8 @@ function DashboardContent() {
           value={credits.displayRemaining}
           sub={`of ${credits.displayTotal} on ${credits.plan_name} plan`}
           delay={0.05}
+          iconColor="text-green-600"
+          iconBg="bg-green-100"
         />
         <StatCard
           icon={TrendingUp}
@@ -70,6 +78,8 @@ function DashboardContent() {
               : "This billing period"
           }
           delay={0.1}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-100"
         />
         <StatCard
           icon={FileText}
@@ -81,6 +91,8 @@ function DashboardContent() {
           }
           sub={`at ${credits.CREDIT_COSTS.ANALYSIS_DEFAULT} credits each`}
           delay={0.15}
+          iconColor="text-purple-600"
+          iconBg="bg-purple-100"
         />
       </div>
 

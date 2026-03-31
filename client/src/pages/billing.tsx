@@ -11,7 +11,7 @@ function BillingContent() {
   const credits = useCredits();
 
   return (
-    <div className="max-w-[960px] space-y-6">
+    <div className="w-full max-w-[960px] mx-auto space-y-6">
       <div><h1 className="text-xl font-semibold mb-1">Billing</h1><p className="text-sm text-muted-foreground">Manage your subscription, credits, and usage.</p></div>
 
       {/* Current plan + credit usage */}

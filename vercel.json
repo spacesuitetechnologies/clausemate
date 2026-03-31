@@ -12,6 +12,9 @@
     },
     "api/generate-contract.ts": {
       "maxDuration": 60
+    },
+    "api/parse-contract-intent.ts": {
+      "maxDuration": 20
     }
   }
 }
