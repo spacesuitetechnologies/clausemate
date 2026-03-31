@@ -59,11 +59,8 @@ function Navbar() {
   return (
     <nav className="border-b border-border/60 bg-white">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-16">
-        <Link href="/" className="flex items-center gap-2">
-          <Logo size={26} />
-          <span className="text-sm font-semibold text-foreground tracking-tight">
-            clausemate<span className="text-primary">.ai</span>
-          </span>
+        <Link href="/" className="flex items-center">
+          <Logo size={30} />
         </Link>
         <Link href="/">
           <span className="text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">

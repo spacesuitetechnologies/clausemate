@@ -37,9 +37,25 @@ function BillingContent() {
             <span className="text-[11px] text-muted-foreground">Credit Usage</span>
             <span className="text-[11px] text-muted-foreground">{credits.displayUsed} / {credits.displayTotal}</span>
           </div>
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, credits.usagePercent)}%` }} transition={{ duration: 0.6 }}
-              className={`h-full rounded-full ${credits.usagePercent > 90 ? "bg-red-500" : credits.usagePercent > 70 ? "bg-amber-500" : "bg-primary"}`} />
+          <div className={`h-2 rounded-full bg-muted overflow-hidden transition-shadow duration-500 ${
+            credits.usagePercent > 80
+              ? "shadow-[0_0_8px_rgba(239,68,68,0.35)]"
+              : credits.usagePercent > 50
+                ? "shadow-[0_0_8px_rgba(234,179,8,0.35)]"
+                : "shadow-[0_0_8px_rgba(34,197,94,0.25)]"
+          }`}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.min(100, credits.usagePercent)}%` }}
+              transition={{ duration: 0.6 }}
+              className={`h-full rounded-full transition-colors duration-500 ${
+                credits.usagePercent > 80
+                  ? "bg-red-500"
+                  : credits.usagePercent > 50
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
+              }`}
+            />
           </div>
         </div>
 

@@ -30,12 +30,9 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
-        <div className="flex items-center gap-2">
-          <Logo size={24} dark />
-          <span className="text-sm font-semibold tracking-tight text-white">
-            clausemate<span className="text-sky-300">.ai</span>
-          </span>
-        </div>
+        <Link href="/dashboard" className="flex items-center">
+          <Logo size={30} dark />
+        </Link>
         <div className="hidden md:flex items-center gap-8">
           {[
             ["Who is this for", "who-is-this-for"],
@@ -477,7 +474,7 @@ function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm px-4" onClick={onClose}>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.25 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-xl border border-border bg-white p-8 shadow-xl">
             <div className="flex items-center justify-between mb-7">
-              <div className="flex items-center gap-2"><Logo size={22} /><span className="text-sm font-semibold">clausemate<span className="text-primary">.ai</span></span></div>
+              <div className="flex items-center"><Logo size={26} /></div>
               <button onClick={onClose} className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent transition-colors" data-testid="close-login-modal"><X className="h-3.5 w-3.5" /></button>
             </div>
 
