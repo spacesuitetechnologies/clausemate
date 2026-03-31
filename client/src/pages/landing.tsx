@@ -30,13 +30,13 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#071428]/90 backdrop-blur-md border-b border-white/[0.08]">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
-        <Link href="/dashboard" className="flex items-center gap-2 transition-all duration-200 hover:opacity-90">
+        <Link href="/dashboard" className="flex items-center gap-1.5 transition-all duration-200 hover:opacity-90">
           <img
             src="/clausemate/mainlogo.png"
             alt="Clausemate"
-            className="h-6 w-auto object-contain"
+            className="h-7 w-auto object-contain"
           />
-          <span className="flex items-center text-sm font-semibold text-white tracking-tight">
+          <span className="flex items-center text-[15px] font-semibold text-white tracking-tight">
             clausemate<span className="text-sky-400">.ai</span>
           </span>
         </Link>
@@ -52,7 +52,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onLogin} className="text-[13px] text-white hover:bg-white/10" data-testid="nav-login-btn">Sign In</Button>
-          <Button size="sm" onClick={onLogin} className="text-[13px] px-5 btn-glass-override relative overflow-hidden no-default-hover-elevate" data-testid="nav-try-free-btn">
+          <Button size="sm" onClick={onLogin} className="text-[13px] px-5 btn-glass-override relative overflow-hidden no-default-hover-elevate [animation:floatSlow_5s_ease-in-out_0.8s_infinite]" data-testid="nav-try-free-btn">
             <span className="absolute inset-0 overflow-hidden pointer-events-none"><span className="light-sweep" /></span>
             <span className="relative z-10">Analyze Free</span>
           </Button>
@@ -68,9 +68,12 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
     <section className="hero-gradient-light min-h-screen flex items-center px-4 sm:px-6 relative overflow-hidden">
       {/* Radial depth overlay — softens flat blue, adds center luminance */}
       <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 60% at 50% 45%, rgba(255,255,255,0.07) 0%, transparent 70%)" }} />
+      {/* Comets */}
+      <div className="comet" aria-hidden="true" />
+      <div className="comet comet-delay" aria-hidden="true" />
       <div className="max-w-[700px] mx-auto text-center relative z-10">
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}
-          className="text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/60 font-medium mb-4 sm:mb-5">
+          className="text-[10px] sm:text-xs uppercase tracking-[0.18em] font-medium mb-4 sm:mb-5 bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
           AI-Powered Contract Analysis · Built for Indian Law
         </motion.p>
 
@@ -91,7 +94,7 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
 
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-8 h-11 text-[13px] btn-glass-override relative overflow-hidden no-default-hover-elevate" data-testid="hero-try-free-btn">
+          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-8 h-11 text-[13px] btn-glass-override relative overflow-hidden no-default-hover-elevate [animation:floatSlow_4s_ease-in-out_infinite]" data-testid="hero-try-free-btn">
             <span className="absolute inset-0 overflow-hidden pointer-events-none"><span className="light-sweep" /></span>
             <span className="relative z-10 flex items-center">Analyze Contract <ArrowRight className="ml-2 h-4 w-4" /></span>
           </Button>
