@@ -31,11 +31,11 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
         <Link href="/dashboard" className="flex items-center gap-2 transition-all hover:scale-[1.02]">
-          <div className="flex items-center justify-center rounded-lg p-1.5 bg-white/20 backdrop-blur-md border border-white/25">
+          <div className="flex items-center justify-center rounded-md p-1 bg-white/15 backdrop-blur-sm border border-white/20">
             <img
               src="/clausemate/mainlogo.png"
               alt="Clausemate"
-              className="h-7 w-auto object-contain"
+              className="h-8 w-auto object-contain"
             />
           </div>
           <span className="text-white font-semibold text-[15px] tracking-tight">
