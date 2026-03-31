@@ -228,32 +228,31 @@
 .btn-gradient-primary {
   background: linear-gradient(
     135deg,
-    #2f4fd4 0%,
-    #3b5bdb 25%,
-    #4c6ef5 55%,
-    #3a54d8 80%,
-    #2f4fd4 100%
+    #38bdf8 0%,
+    #60a5fa 40%,
+    #3b82f6 70%,
+    #38bdf8 100%
   );
   background-size: 280% 280%;
   animation: btnGradientPulse 5s ease infinite;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
   color: #fff !important;
   transition: box-shadow 0.25s ease, transform 0.2s ease;
 }
 
 .btn-gradient-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 22px rgba(59, 91, 219, 0.38), 0 1px 5px rgba(59, 91, 219, 0.22);
+  box-shadow: 0 4px 20px rgba(56, 189, 248, 0.45), 0 1px 5px rgba(56, 189, 248, 0.25);
   transform: scale(1.02);
 }
 
 .btn-gradient-primary:active:not(:disabled) {
   transform: scale(0.985);
-  box-shadow: 0 2px 10px rgba(59, 91, 219, 0.28);
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.30);
 }
 
 .btn-gradient-primary:disabled {
   animation: none;
-  background: hsl(234 60% 48%);
+  background: #7dd3fc;
 }
 
 @media (prefers-reduced-motion: reduce) {

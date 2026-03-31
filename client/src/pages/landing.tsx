@@ -30,14 +30,12 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a1e3d] border-b border-white/[0.06] shadow-lg">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
-        <Link href="/dashboard" className="flex items-center gap-2 transition-all hover:scale-[1.02]">
-          <div className="flex items-center justify-center rounded-md p-1 bg-white/15 backdrop-blur-sm border border-white/20">
-            <img
-              src="/clausemate/mainlogo.png"
-              alt="Clausemate"
-              className="h-8 w-auto object-contain"
-            />
-          </div>
+        <Link href="/dashboard" className="flex items-center gap-1.5 transition-all duration-200 hover:opacity-90">
+          <img
+            src="/clausemate/mainlogo.png"
+            alt="Clausemate"
+            className="h-8 w-auto object-contain"
+          />
           <span className="text-white font-semibold text-[15px] tracking-tight">
             clausemate<span className="text-blue-400">.ai</span>
           </span>
@@ -54,7 +52,7 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onLogin} className="text-[13px] text-white hover:bg-white/10" data-testid="nav-login-btn">Sign In</Button>
-          <Button size="sm" onClick={onLogin} className="text-[13px] px-5 bg-white text-[#0a1e3d] hover:bg-white/90" data-testid="nav-try-free-btn">Get Started</Button>
+          <Button size="sm" onClick={onLogin} className="text-[13px] px-5" data-testid="nav-try-free-btn">Get Started</Button>
         </div>
       </div>
     </nav>
@@ -89,7 +87,7 @@ function HeroSection({ onTryFree }: { onTryFree: () => void }) {
 
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-7 h-11 text-[13px] bg-white text-[#0a3d6e] hover:bg-white/90" data-testid="hero-try-free-btn">
+          <Button size="lg" onClick={onTryFree} className="w-full sm:w-auto px-7 h-11 text-[13px]" data-testid="hero-try-free-btn">
             Get Started <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button variant="outline" size="lg" onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
