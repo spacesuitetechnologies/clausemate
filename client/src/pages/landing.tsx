@@ -64,181 +64,46 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
 
 /* ── Hero ── */
 function HeroSection({ onTryFree }: { onTryFree: () => void }) {
-  const [phase, setPhase] = useState(0);
-
-  useEffect(() => {
-    const timeouts: ReturnType<typeof setTimeout>[] = [];
-    function runCycle() {
-      setPhase(0);
-      timeouts.push(setTimeout(() => setPhase(1), 1600));
-      timeouts.push(setTimeout(() => setPhase(2), 3100));
-      timeouts.push(setTimeout(runCycle,          6600));
-    }
-    runCycle();
-    return () => timeouts.forEach(clearTimeout);
-  }, []);
-
   return (
-    <section className="bg-[#080c14] text-white min-h-screen flex items-center relative overflow-hidden">
+    <section
+      className="min-h-screen flex items-center justify-center text-white"
+      style={{ background: "linear-gradient(135deg, #0b2a4a 0%, #123e63 40%, #2f6f8f 100%)" }}
+    >
+      <div className="flex flex-col items-center justify-center text-center max-w-3xl mx-auto px-6 py-28">
 
-      {/* Single centered glow — keeps background alive without noise */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[480px] bg-blue-600/7 blur-[130px] rounded-full" />
-      </div>
+        {/* Badge */}
+        <p className="text-xs tracking-[0.25em] text-white/60 uppercase mb-6">
+          AI-Powered Contract Analysis • Built for Indian Law
+        </p>
 
-      <div className="relative z-10 w-full max-w-6xl mx-auto px-6 pt-28 pb-20
-                      grid grid-cols-1 lg:grid-cols-[1fr_480px] gap-16 items-center">
+        {/* Headline */}
+        <h1 className="text-5xl md:text-6xl font-medium tracking-tight leading-tight text-white mb-0">
+          Upload a contract.{" "}
+          <span className="text-blue-200">Know the risks instantly.</span>
+        </h1>
 
-        {/* ─── Left ─── */}
-        <div>
+        {/* Subtext */}
+        <p className="text-white/70 text-lg mt-4 max-w-2xl">
+          Instantly detect risks, missing clauses, and hidden liabilities in any contract — built for Indian law.
+        </p>
 
-          {/* Status badge */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
-            className="inline-flex items-center gap-2 text-[11px] text-white/40 mb-8 tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-            AI-powered · Trained on Indian contract law
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.06 }}
-            className="text-[2.6rem] sm:text-[3.2rem] lg:text-[3.8rem] font-semibold leading-[1.06] tracking-[-0.025em] mb-6">
-            Spot contract risks<br />
-            <span className="text-white/35">before you sign.</span>
-          </motion.h1>
-
-          {/* Subtext */}
-          <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.13 }}
-            className="text-[15px] text-white/50 leading-[1.75] mb-9 max-w-[400px]">
-            Upload any agreement. Clausemate surfaces hidden liabilities, flags missing clauses, and suggests fixes — in under 30 seconds.
-          </motion.p>
-
-          {/* CTAs */}
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex items-center gap-4 mb-7">
-            <Button size="lg" onClick={onTryFree}
-              className="px-7 h-11 text-[13.5px] font-medium btn-hero-primary no-default-hover-elevate"
-              data-testid="hero-try-free-btn">
-              Analyze a Contract
-            </Button>
-            <button
-              onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
-              className="text-[13px] text-white/40 hover:text-white/65 transition-colors"
-              data-testid="hero-see-demo-btn">
-              See how it works →
-            </button>
-          </motion.div>
-
-          {/* Trust line */}
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-            className="text-[11px] text-white/22 tracking-wide">
-            No signup required &nbsp;·&nbsp; PDF &amp; DOCX &nbsp;·&nbsp; Results in under 30 s
-          </motion.p>
-
+        {/* CTAs */}
+        <div className="mt-8 flex gap-4">
+          <button
+            onClick={onTryFree}
+            className="bg-gradient-to-r from-blue-400 to-blue-500 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-[0_0_20px_rgba(96,165,250,0.4)] transition-opacity hover:opacity-90"
+            data-testid="hero-try-free-btn"
+          >
+            Analyze Contract
+          </button>
+          <button
+            onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })}
+            className="border border-white/20 text-white/80 px-6 py-3 rounded-lg transition-colors hover:bg-white/10"
+            data-testid="hero-see-demo-btn"
+          >
+            See How It Works
+          </button>
         </div>
-
-        {/* ─── Right: product mockup ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, delay: 0.32 }}
-          className="bg-[#0d1117] border border-white/[0.07] rounded-2xl overflow-hidden
-                     shadow-[0_32px_64px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.04)]">
-
-          {/* Window chrome */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05] bg-white/[0.015]">
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.08]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.08]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-white/[0.08]" />
-            </div>
-            <span className="text-[11px] text-white/25 font-mono">Vendor_Agreement_2024.pdf</span>
-            <div className="w-14" />
-          </div>
-
-          {/* Body */}
-          <div className="p-5">
-
-            {/* Score row */}
-            <div className="flex items-end justify-between mb-4">
-              <div>
-                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Risk Score</p>
-                <p className="text-[28px] font-semibold leading-none text-red-400">
-                  74 <span className="text-[14px] font-normal text-white/20">/100</span>
-                </p>
-              </div>
-              <span className="text-[10px] font-medium text-red-400 bg-red-400/10 border border-red-400/15 px-2 py-0.5 rounded-full mb-1">
-                High Risk
-              </span>
-            </div>
-
-            {/* Score bar */}
-            <div className="h-1 bg-white/[0.06] rounded-full mb-5 overflow-hidden">
-              <div className="h-full w-[74%] bg-gradient-to-r from-amber-500 to-red-500 rounded-full" />
-            </div>
-
-            {/* Clause flags */}
-            <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2.5">Flagged Clauses</p>
-            <div className="space-y-2">
-
-              {/* Visible from phase 0 */}
-              <div className="flex items-start gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-lg">
-                <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0 mt-px">MED</span>
-                <div className="min-w-0">
-                  <p className="text-[12px] text-white/65 leading-snug">Payment terms missing grace period</p>
-                  <p className="text-[10px] text-white/25 mt-0.5">§ 8.1</p>
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {phase >= 1 && (
-                  <motion.div key="f2"
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35 }}
-                    className="flex items-start gap-3 px-3 py-2.5 bg-red-500/[0.07] border border-red-500/15 rounded-lg overflow-hidden">
-                    <span className="text-[9px] font-semibold text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded shrink-0 mt-px">HIGH</span>
-                    <div className="min-w-0">
-                      <p className="text-[12px] text-white/65 leading-snug">Unilateral termination — no notice required</p>
-                      <p className="text-[10px] text-white/25 mt-0.5">§ 14.2 · Fix suggested</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {phase >= 2 && (
-                  <motion.div key="f3"
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35 }}
-                    className="flex items-start gap-3 px-3 py-2.5 bg-white/[0.03] border border-white/[0.05] rounded-lg overflow-hidden">
-                    <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0 mt-px">MED</span>
-                    <div className="min-w-0">
-                      <p className="text-[12px] text-white/65 leading-snug">IP ownership undefined for deliverables</p>
-                      <p className="text-[10px] text-white/25 mt-0.5">§ 19 · Clause missing</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Footer strip */}
-            <AnimatePresence>
-              {phase >= 2 && (
-                <motion.div key="footer"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }} transition={{ duration: 0.3, delay: 0.15 }}
-                  className="mt-4 pt-3.5 border-t border-white/[0.05] flex items-center justify-between">
-                  <span className="text-[11px] text-white/25">3 issues · 1 fix available</span>
-                  <span className="text-[11px] text-blue-400/70">Review all →</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-          </div>
-        </motion.div>
 
       </div>
     </section>
