@@ -63,16 +63,6 @@ export async function saveDirectAnalysis(
       analysisPayload.risk_score = result.risk_score;
     }
 
-    const { error: insertError } = await supabase
-      .from("analyses")
-      .insert(analysisPayload);
-
-    if (insertError) {
-      console.error("[saveDirectAnalysis] SUPABASE ERROR FULL:", JSON.stringify(insertError));
-      // Don't throw — fall through to contract update attempt
-    }
-
-    // Update contracts table — each field attempted independently
     const contractPayload: Record<string, unknown> = {
       latest_analysis_status: "completed",
     };
@@ -84,17 +74,19 @@ export async function saveDirectAnalysis(
       contractPayload.risk_score = result.risk_score;
     }
 
-    const { error: contractUpdateError } = await supabase
-      .from("contracts")
-      .update(contractPayload)
-      .eq("id", contractId);
+    const [insertResult, updateResult] = await Promise.all([
+      supabase.from("analyses").insert(analysisPayload),
+      supabase.from("contracts").update(contractPayload).eq("id", contractId),
+    ]);
 
-    if (contractUpdateError) {
-      console.error("[saveDirectAnalysis] CONTRACT UPDATE ERROR:", contractUpdateError);
-      // Don't throw — save is best-effort
+    if (insertResult.error) {
+      console.error("[saveDirectAnalysis] INSERT ERROR:", JSON.stringify(insertResult.error));
+    }
+    if (updateResult.error) {
+      console.error("[saveDirectAnalysis] CONTRACT UPDATE ERROR:", updateResult.error);
     }
 
-    return !insertError && !contractUpdateError;
+    return !insertResult.error && !updateResult.error;
   } catch (err) {
     console.error("[saveDirectAnalysis] SAVE CRASH:", err);
     return false;

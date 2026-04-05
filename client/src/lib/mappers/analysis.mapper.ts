@@ -10,6 +10,7 @@ import type {
   RawClause,
   RiskLevel,
 } from "@/types/analysis";
+import type { JobStatusResponse, AnalyzeContractResult } from "@/lib/api";
 
 // ── Risk normalization ────────────────────────────────────────────────────────
 
@@ -64,6 +65,41 @@ export function mapAnalysisResponse(raw: AnalysisResponse): ContractAnalysis {
     credits_actual: raw.credits_actual,
     include_redlines: raw.include_redlines,
     error: raw.error,
+    clauses,
+  };
+}
+
+/**
+ * Maps a JobStatusResponse (from GET /api/analysis/:id) into a ContractAnalysis.
+ * Derives clauses from structured_risks if present.
+ */
+export function mapJobResult(job: JobStatusResponse): ContractAnalysis {
+  const result = job.result as (AnalyzeContractResult & { structured_risks?: Array<{ clause: string; issue: string; level: string; reason: string; impact: string; suggestion: string }> }) | null;
+  const riskScore = result?.risk_score ?? 0;
+  const structuredRisks = result?.structured_risks ?? [];
+
+  const clauses: ClauseResult[] = structuredRisks.map((r, i) => ({
+    id: `${job.id}-${i}`,
+    type: r.clause ?? "risk",
+    title: r.clause ?? `Risk ${i + 1}`,
+    text: r.issue ?? r.reason ?? "",
+    risk_level: normalizeRiskLevel(r.level),
+    score: r.level === "high" ? 75 : r.level === "medium" ? 50 : 20,
+    explanation: r.reason ?? "",
+    issues: r.impact ? [r.impact] : [],
+    suggestion: r.suggestion ?? undefined,
+  }));
+
+  return {
+    id: job.id,
+    contract_id: job.contract_id,
+    contract_name: "Contract",
+    overall_score: typeof riskScore === "number" ? riskScore : 0,
+    risk_level: riskScoreToLevel(typeof riskScore === "number" ? riskScore : 0),
+    status: job.status,
+    credits_actual: job.credits_actual,
+    include_redlines: false,
+    error: job.error,
     clauses,
   };
 }

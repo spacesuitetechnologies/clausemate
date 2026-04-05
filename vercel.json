@@ -7,6 +7,18 @@
     "api/analyze.ts": {
       "maxDuration": 60
     },
+    "api/worker/analyze.ts": {
+      "maxDuration": 300
+    },
+    "api/analysis/[id].ts": {
+      "maxDuration": 10
+    },
+    "api/contracts/[id]/analysis.ts": {
+      "maxDuration": 10
+    },
+    "api/user/plan.ts": {
+      "maxDuration": 10
+    },
     "api/generate-clause.ts": {
       "maxDuration": 30
     },

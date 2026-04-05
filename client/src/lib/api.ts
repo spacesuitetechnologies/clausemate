@@ -16,7 +16,7 @@
 
 import type { UserPlan, CreditUsage, AnalysisCost, PlanId } from "./credits";
 import { CREDIT_COSTS, getPlan } from "./credits";
-import type { AnalysisResponse, ContractSummary } from "@/types/analysis";
+import type { ContractSummary, AnalysisResponse } from "@/types/analysis";
 import { supabase } from "@/lib/supabase";
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -109,7 +109,10 @@ export async function fetchUserPlan(): Promise<UserPlan> {
     await delay(150);
     return { ...mockPlan };
   }
-  const res = await fetch(`${BASE_URL}/user/plan`, { credentials: "include" });
+  const res = await fetch(`${BASE_URL}/user/plan`, {
+    headers: await authHeaders(),
+    credentials: "include",
+  });
   return handleResponse(res);
 }
 
@@ -129,7 +132,10 @@ export async function fetchUsage(): Promise<CreditUsage> {
       period_end: end.toISOString().slice(0, 10),
     };
   }
-  const res = await fetch(`${BASE_URL}/user/usage`, { credentials: "include" });
+  const res = await fetch(`${BASE_URL}/user/usage`, {
+    headers: await authHeaders(),
+    credentials: "include",
+  });
   return handleResponse(res);
 }
 
@@ -212,48 +218,6 @@ export async function fetchContracts(): Promise<ContractSummary[]> {
   return handleResponse(res);
 }
 
-export async function uploadContract(
-  formData: FormData,
-  onProgress?: (pct: number) => void,
-): Promise<{ contract_id: string; filename: string; file_size: number; status: string }> {
-  if (USE_MOCK) {
-    for (let p = 0; p <= 100; p += 25) {
-      await delay(120);
-      onProgress?.(p);
-    }
-    return {
-      contract_id: "mock-contract-id",
-      filename: "contract.pdf",
-      file_size: 250000,
-      status: "uploaded",
-    };
-  }
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
-    });
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText));
-      } else {
-        let msg = `Upload failed (${xhr.status})`;
-        try {
-          msg = JSON.parse(xhr.responseText).error ?? msg;
-        } catch {}
-        reject(new ApiError(msg, xhr.status));
-      }
-    });
-    xhr.addEventListener("error", () =>
-      reject(new ApiError("Network error during upload", 0)),
-    );
-    xhr.open("POST", `${BASE_URL}/contracts/upload`);
-    xhr.withCredentials = true;
-    xhr.send(formData);
-  });
-}
-
 // ── Analysis ──────────────────────────────────────────────────────────────────
 
 export interface StartAnalysisResult {
@@ -331,6 +295,15 @@ export interface Suggestion {
   fix: string;
 }
 
+export interface StructuredRisk {
+  clause: string;
+  issue: string;
+  level: "high" | "medium" | "low";
+  reason: string;
+  impact: string;
+  suggestion: string;
+}
+
 export interface AnalyzeContractResult {
   summary: string | null;
   risks: string[];
@@ -339,79 +312,53 @@ export interface AnalyzeContractResult {
   missing_clauses?: MissingClause[];
   suggestions?: Suggestion[];
   contract_text?: string;
-  error?: string;
-  parse_fail_reason?: string;
+  parties?: string[];
+  effective_date?: string | null;
+  jurisdiction?: string | null;
+  was_trimmed?: boolean;
+  structured_risks?: StructuredRisk[];
 }
 
-export async function analyzeContract(
-  contractId: string,
-  includeRedlines: boolean = false,
-): Promise<AnalyzeContractResult> {
-  if (!contractId) {
-    throw new Error("Missing contractId");
-  }
-
-  if (USE_MOCK) {
-    await delay(800);
-    return {
-      summary: "This is a sample contract summary.",
-      risks: ["Payment delay risk", "Termination clause unclear"],
-      clauses: ["Payment terms", "Liability clause"],
-      risk_score: 62,
-    };
-  }
-
-  const res = await fetch(`${BASE_URL}/analyze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    credentials: "include",
-    body: JSON.stringify({
-      contract_id: contractId,
-      include_redlines: !!includeRedlines,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(err.error || "Analyze failed", res.status);
-  }
-
-  return res.json();
+export interface JobStatusResponse {
+  id: string;
+  contract_id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  result: AnalyzeContractResult | null;
+  error: string | null;
+  credits_actual: number | null;
+  updated_at?: string | null;
 }
 
-export async function getAnalysisResult(analysisId: string): Promise<AnalysisResponse> {
+export async function getAnalysisResult(analysisId: string): Promise<JobStatusResponse> {
   if (USE_MOCK) {
-    // Simulate a short processing delay then return completed
     await delay(300);
     const { mockClauses } = await import("./mock-data");
     return {
       id: analysisId,
       contract_id: "mock-contract-id",
-      contract_name: "service_agreement_2026.pdf",
       status: "completed",
-      risk_score: 72,
-      credits_estimated: 10,
-      credits_actual: 10,
-      include_redlines: false,
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
+      result: {
+        summary: "This is a sample contract summary for a consulting services agreement.",
+        risks: ["Payment delay risk — no interest on late payments", "Overly broad IP assignment"],
+        clauses: ["Payment Terms", "IP Assignment", "Non-Compete", "Termination", "Indemnification"],
+        risk_score: 72,
+        missing_clauses: [],
+        suggestions: mockClauses.map((c) => ({ clause: c.title, fix: c.suggestedRewrite })),
+        structured_risks: mockClauses.map((c) => ({
+          clause: c.title,
+          issue: c.text,
+          level: c.riskLevel,
+          reason: c.explanation,
+          impact: "Significant disadvantage to the weaker party.",
+          suggestion: c.suggestedRewrite,
+        })),
+      },
       error: null,
-      clauses: mockClauses.map((c, i) => ({
-        id: c.id,
-        clause_number: i + 1,
-        type: "general",
-        title: c.title,
-        text: c.text,
-        risk_level: c.riskLevel,
-        score: c.riskLevel === "high" ? 75 : c.riskLevel === "medium" ? 50 : 20,
-        explanation: c.explanation,
-        suggested_rewrite: c.suggestedRewrite,
-        policy_violations: null,
-        issues: [],
-      })),
+      credits_actual: 10,
     };
   }
   const res = await fetch(`${BASE_URL}/analysis/${analysisId}`, {
+    headers: await authHeaders(),
     credentials: "include",
   });
   return handleResponse(res);
@@ -425,9 +372,10 @@ export async function fetchContractAnalysis(
   contractId: string,
 ): Promise<AnalysisResponse | null> {
   if (USE_MOCK) {
-    return getAnalysisResult(`mock-analysis-${contractId}`);
+    return null;
   }
   const res = await fetch(`${BASE_URL}/contracts/${contractId}/analysis`, {
+    headers: await authHeaders(),
     credentials: "include",
   });
   if (res.status === 404) return null;

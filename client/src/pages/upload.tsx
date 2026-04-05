@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
@@ -36,7 +35,6 @@ import { useAnalysisPolling } from "@/hooks/use-analysis-polling";
 import { useToast } from "@/hooks/use-toast";
 import * as api from "@/lib/api";
 import { handleUpload } from "@/lib/upload";
-import { saveDirectAnalysis } from "@/lib/analyses";
 import type { AnalysisCost } from "@/lib/credits";
 import type { ClauseResult } from "@/types/analysis";
 import type { AnalyzeContractResult } from "@/lib/api";
@@ -48,13 +46,15 @@ const ANALYSIS_STEPS = ["Uploading contract", "Processing document", "Generating
 // ── File validation ────────────────────────────────────────────────────────────
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ACCEPTED_EXTENSIONS = ["pdf", "docx", "txt"];
 
 function validateFile(f: File): string | null {
   if (f.size === 0) {
     return "File is empty. Please upload a valid contract document.";
   }
-  if (f.type !== "application/pdf") {
-    return "Only PDF files are supported.";
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+    return "Only PDF, DOCX, and TXT files are supported.";
   }
   if (f.size > MAX_FILE_SIZE) {
     return `File too large. Max size is 10 MB (got ${(f.size / 1024 / 1024).toFixed(1)} MB).`;
@@ -63,17 +63,23 @@ function validateFile(f: File): string | null {
 }
 
 function cleanErrorMessage(err: unknown): string {
-  if (!(err instanceof Error)) return "Analysis failed. Please try again.";
-  const msg = err.message;
-  // Strip raw HTTP noise and return a clean user-facing string
-  if (msg.includes("402") || msg.toLowerCase().includes("insufficient")) return "Insufficient credits to run this analysis.";
-  if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) return "Your session expired. Please sign in again.";
-  if (msg.includes("413") || msg.toLowerCase().includes("too large")) return "File is too large to process.";
-  if (msg.includes("fetch") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) return "Could not reach the server. Check your connection.";
-  if (msg.includes("500") || msg.includes("Internal Server Error")) return "Server error. Please try again in a moment.";
-  // If the message looks clean (no HTTP codes), pass it through
-  if (/^\d{3}/.test(msg)) return "Analysis failed. Please try again.";
-  return msg;
+  if (err instanceof api.ApiError) {
+    if (err.status === 402) return "Insufficient credits to run this analysis.";
+    if (err.status === 401) return "Your session expired. Please sign in again.";
+    if (err.status === 413) return "File is too large to process.";
+    if (err.status === 429) return "Too many requests. Please wait a moment before trying again.";
+    if (err.status === 422) return err.message || "Could not extract text from this document.";
+    if (err.status === 502) return "Analysis service is temporarily unavailable. Please try again.";
+    if (err.status >= 500) return err.message || "Server error. Please try again in a moment.";
+    return err.message;
+  }
+  if (err instanceof Error) {
+    if (err.message.includes("fetch") || err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      return "Could not reach the server. Check your connection.";
+    }
+    return err.message;
+  }
+  return "Analysis failed. Please try again.";
 }
 
 function formatFileSize(bytes: number): string {
@@ -448,7 +454,6 @@ function UploadContent() {
   const { estimateCost, checkAffordability } = useAuth();
   const credits = useCredits();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
   // ── File state ───────────────────────────────────────────────────────────────
@@ -692,9 +697,12 @@ function UploadContent() {
     };
   }, [previewUrl]);
 
-  // React to polling result (mock mode)
+  // React to polling result (both mock and real modes)
   useEffect(() => {
     if (pollingState.status === "completed" && pollingState.analysis) {
+      if (pollingState.directResult) {
+        setDirectResult(pollingState.directResult);
+      }
       setAnalysisCost((prev) =>
         prev
           ? { ...prev, actual_credits: pollingState.creditsActual ?? prev.estimated_credits }
@@ -707,7 +715,7 @@ function UploadContent() {
       setAnalysisId(null);
       setPhase("upload");
     }
-  }, [pollingState.status, pollingState.analysis, pollingState.creditsActual, pollingState.error, toast]);
+  }, [pollingState.status, pollingState.analysis, pollingState.directResult, pollingState.creditsActual, pollingState.error, toast]);
 
   // ── File handlers ────────────────────────────────────────────────────────────
 
@@ -758,36 +766,17 @@ function UploadContent() {
 
     try {
       setCurrentStep(2); // Generating results
-      if (api.USE_MOCK) {
-        const result = await api.startAnalysis(targetContractId, includeRedlines, 6);
-        setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
-        setAnalysisId(result.analysis_id);
-      } else {
-        const result = await api.analyzeContract(targetContractId, includeRedlines);
-        saveDirectAnalysis(targetContractId, result).catch((saveErr: unknown) => {
-          const msg = saveErr instanceof Error ? saveErr.message : "Could not save results";
-          console.warn("[upload] saveDirectAnalysis failed (non-fatal):", msg);
-          toast({ title: "Analysis completed but could not be saved", description: msg, variant: "destructive" });
-        });
-        queryClient.invalidateQueries({ queryKey: ["contracts"] });
-        queryClient.invalidateQueries({ queryKey: ["direct-analysis", targetContractId] });
-        setDirectResult(result);
-        setPhase("results");
-        if (result.error === "PARSE_FAILED") {
-          toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
-        } else if (result.error) {
-          toast({ title: "Analysis error", description: result.parse_fail_reason ?? result.error, variant: "destructive" });
-        } else {
-          toast({ title: "Re-analysis complete", description: "Your contract has been re-analyzed." });
-        }
-      }
+      const result = await api.startAnalysis(targetContractId, includeRedlines, 6);
+      setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
+      setAnalysisId(result.analysis_id);
+      // Polling effect will fire setDirectResult + setPhase("results") on completion
     } catch (err: unknown) {
       setAnalysisError(cleanErrorMessage(err));
       setPhase("upload");
     } finally {
       setIsReanalyzing(false);
     }
-  }, [includeRedlines, queryClient, toast]);
+  }, [includeRedlines]);
 
   // ── Analyze ──────────────────────────────────────────────────────────────────
 
@@ -811,32 +800,11 @@ function UploadContent() {
       setContractId(uploadedContractId);
       setCurrentStep(1); // Step 1: Processing
 
-      if (api.USE_MOCK) {
-        const result = await api.startAnalysis(uploadedContractId, includeRedlines, 6);
-        setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
-        setCurrentStep(2);
-        setAnalysisId(result.analysis_id);
-      } else {
-        setCurrentStep(2);
-        const result = await api.analyzeContract(uploadedContractId, includeRedlines);
-        // Save to Supabase in the background — a save failure must not hide results from the user
-        saveDirectAnalysis(uploadedContractId, result).catch((saveErr: unknown) => {
-          const msg = saveErr instanceof Error ? saveErr.message : "Could not save results";
-          console.warn("[upload] saveDirectAnalysis failed (non-fatal):", msg);
-          toast({ title: "Analysis completed but could not be saved", description: msg, variant: "destructive" });
-        });
-        queryClient.invalidateQueries({ queryKey: ["contracts"] });
-        queryClient.invalidateQueries({ queryKey: ["direct-analysis", uploadedContractId] });
-        setDirectResult(result);
-        setPhase("results");
-        if (result.error === "PARSE_FAILED") {
-          toast({ title: "Could not read PDF", description: result.summary ?? undefined, variant: "destructive" });
-        } else if (result.error) {
-          toast({ title: "Analysis error", description: result.parse_fail_reason ?? result.error, variant: "destructive" });
-        } else {
-          toast({ title: "Analysis complete", description: "Your contract has been analyzed." });
-        }
-      }
+      setCurrentStep(2);
+      const result = await api.startAnalysis(uploadedContractId, includeRedlines, 6);
+      setAnalysisCost({ estimated_credits: result.estimated_credits, actual_credits: 0, breakdown: result.breakdown });
+      setAnalysisId(result.analysis_id);
+      // Polling effect will fire setDirectResult + setPhase("results") on completion
     } catch (err: unknown) {
       const message = cleanErrorMessage(err);
       if (err instanceof api.ApiError && err.status === 402) {
@@ -847,7 +815,7 @@ function UploadContent() {
       setAnalysisError(message);
       setPhase("upload");
     }
-  }, [affordCheck, file, includeRedlines, queryClient, toast]);
+  }, [affordCheck, file, includeRedlines, toast]);
 
   const analysis = pollingState.analysis;
   const clauses = analysis?.clauses ?? [];
@@ -931,7 +899,7 @@ function UploadContent() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,application/pdf"
+                accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -952,7 +920,7 @@ function UploadContent() {
                 >
                   <Upload className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2.5 transition-transform duration-200 group-hover:scale-110 group-hover:text-primary/50" />
                   <p className="text-[13px] font-medium mb-1">Drop your contract here</p>
-                  <p className="text-[11px] text-muted-foreground/70">PDF only · up to 10 MB</p>
+                  <p className="text-[11px] text-muted-foreground/70">PDF, DOCX, or TXT · up to 10 MB</p>
                 </div>
               ) : (
                 <div className="rounded-xl border border-border bg-white p-4 transition-colors duration-200 hover:border-primary/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">

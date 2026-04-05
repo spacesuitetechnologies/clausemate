@@ -14,7 +14,6 @@ import { useContracts, useContractAnalysis, useDirectAnalysis } from "@/hooks/us
 import { useQueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { getSignedUrlById } from "@/lib/contracts";
-import { saveDirectAnalysis } from "@/lib/analyses";
 import { useToast } from "@/hooks/use-toast";
 import type { ContractSummary } from "@/types/analysis";
 
@@ -117,11 +116,9 @@ function ReportsContent() {
   const handleReanalyze = useCallback(async (contractId: string) => {
     setReanalyzingId(contractId);
     try {
-      const result = await api.analyzeContract(contractId);
-      await saveDirectAnalysis(contractId, result);
-      queryClient.invalidateQueries({ queryKey: ["direct-analysis", contractId] });
+      await api.startAnalysis(contractId);
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      toast({ title: "Re-analysis complete", description: "The contract has been re-analyzed." });
+      toast({ title: "Re-analysis queued", description: "The contract is being re-analyzed." });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Re-analysis failed.";
       toast({ title: "Re-analysis failed", description: msg, variant: "destructive" });

@@ -7,7 +7,7 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UserPlan, PlanId, AnalysisCost } from "@/lib/credits";
 import { estimateAnalysisCost, canAfford } from "@/lib/credits";
 import * as api from "@/lib/api";
@@ -102,13 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = !!user;
 
-  // Plan data is served from the backend when available.
-  // Until a backend is connected, the free-tier default is used.
-  const [userPlan] = useState<UserPlan>(defaultPlan);
+  // Plan data — fetched from /api/user/plan, cached by React Query.
+  const { data: userPlan = defaultPlan } = useQuery<UserPlan>({
+    queryKey: ["user", "plan"],
+    queryFn: api.fetchUserPlan,
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
 
   const refreshCredits = useCallback(async () => {
-    // no-op until backend plan endpoint is wired up
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
+  }, [queryClient]);
 
   const login = useCallback(async (email: string, password: string) => {
     setIsAuthLoading(true);
@@ -177,8 +181,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           credits_remaining: plan.credits,
           overage_credits: 0,
           overage_cost: 0,
-          can_redline: planId !== "free",
-          can_rewrite: planId === "professional" || planId === "enterprise",
+          can_redline: true,
+          can_rewrite: tier === "professional" || tier === "enterprise",
         };
         queryClient.setQueryData(["user", "plan"], mockUpdated);
         return;
