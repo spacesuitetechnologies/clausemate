@@ -167,7 +167,7 @@ export async function createSubscription(
   }
   const res = await fetch(`${BASE_URL}/billing/create-subscription`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
     body: JSON.stringify({ plan_id: planId }),
   });
@@ -189,7 +189,7 @@ export async function verifyPayment(
   }
   const res = await fetch(`${BASE_URL}/billing/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     credentials: "include",
     body: JSON.stringify(params),
   });
@@ -214,7 +214,10 @@ export async function fetchContracts(): Promise<ContractSummary[]> {
       latest_analysis_id: `mock-analysis-${c.id}`,
     }));
   }
-  const res = await fetch(`${BASE_URL}/contracts`, { credentials: "include" });
+  const res = await fetch(`${BASE_URL}/contracts`, {
+    headers: await authHeaders(),
+    credentials: "include",
+  });
   return handleResponse(res);
 }
 

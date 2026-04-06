@@ -11,7 +11,6 @@ import {
   ChevronUp,
   Sparkles,
   Lock,
-  Coins,
   RefreshCw,
   Clock,
   Loader2,
@@ -64,7 +63,7 @@ function validateFile(f: File): string | null {
 
 function cleanErrorMessage(err: unknown): string {
   if (err instanceof api.ApiError) {
-    if (err.status === 402) return "Insufficient credits to run this analysis.";
+    if (err.status === 402) return "No contracts remaining this month. Upgrade or buy extra contracts.";
     if (err.status === 401) return "Your session expired. Please sign in again.";
     if (err.status === 413) return "File is too large to process.";
     if (err.status === 429) return "Too many requests. Please wait a moment before trying again.";
@@ -283,7 +282,7 @@ function AnalysisSections({
         </div>
         {analysisCost && (
           <p className="text-[11px] text-muted-foreground/60 pt-1.5 border-t border-border/40">
-            {analysisCost.actual_credits} credits used
+            1 contract used from your monthly quota
           </p>
         )}
       </div>
@@ -808,7 +807,7 @@ function UploadContent() {
     } catch (err: unknown) {
       const message = cleanErrorMessage(err);
       if (err instanceof api.ApiError && err.status === 402) {
-        toast({ title: "Insufficient credits", description: message, variant: "destructive" });
+        toast({ title: "Contract limit reached", description: message, variant: "destructive" });
       } else {
         toast({ title: "Analysis failed", description: message, variant: "destructive" });
       }
@@ -892,7 +891,7 @@ function UploadContent() {
           {phase === "upload" && (
             <div className="space-y-3">
               {!affordCheck.allowed && credits.plan_id === "free" && (
-                <UpgradeBanner feature="more credits" />
+                <UpgradeBanner feature="more contracts" />
               )}
 
               {/* Hidden input */}
@@ -967,24 +966,14 @@ function UploadContent() {
                 </div>
               )}
 
-              {/* Credit cost + Analyze CTA */}
+              {/* Analyze CTA */}
               {file && !fileError && (
                 <div className="rounded-xl border border-border bg-white p-4 space-y-3 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-                  <div className="flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-primary" />
-                    <span className="text-[12px] font-semibold">Estimated Cost</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {estimated.breakdown.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-[12px]">
-                        <span className="text-muted-foreground">{item.label}</span>
-                        <span className="font-medium">{item.credits} credits</span>
-                      </div>
-                    ))}
-                    <div className="border-t border-border/40 pt-1.5 flex items-center justify-between text-[12px] font-semibold">
-                      <span>Total</span>
-                      <span className="text-primary">{estimated.estimated_credits} credits</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold">Ready to analyze</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Uses 1 contract · {credits.contractsRemaining} remaining
+                    </span>
                   </div>
                   {credits.can_redline && (
                     <label className="flex items-center gap-2 text-[12px] text-muted-foreground cursor-pointer">
@@ -994,7 +983,7 @@ function UploadContent() {
                         onChange={(e) => setIncludeRedlines(e.target.checked)}
                         className="rounded border-border"
                       />
-                      Include redlines (+{6 * credits.CREDIT_COSTS.REDLINE} credits)
+                      Include redline suggestions
                     </label>
                   )}
                   {!affordCheck.allowed && (
@@ -1014,7 +1003,7 @@ function UploadContent() {
                     ) : (
                       <>
                         <Sparkles className="mr-2 h-4 w-4" />
-                        Analyze Contract ({estimated.estimated_credits} credits)
+                        Analyze Contract
                       </>
                     )}
                   </Button>

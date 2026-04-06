@@ -43,7 +43,7 @@ const BUILT_IN_POLICIES: Policy[] = [
     category: "dispute",
     risk_level: "medium",
     explanation:
-      "No dispute resolution or arbitration clause found. Disputes will default to litigation, which is costly and slow.",
+      "No dispute resolution or arbitration clause found. Disputes will default to litigation — costly and slow under Indian courts.",
     check: (r) => !r.clauses.some((c) => /dispute|arbitrat|mediat/i.test(c)),
   },
   {
@@ -51,7 +51,7 @@ const BUILT_IN_POLICIES: Policy[] = [
     category: "jurisdiction",
     risk_level: "medium",
     explanation:
-      "No governing law or jurisdiction specified. In cross-border contracts this creates ambiguity about which courts and laws apply.",
+      "No governing law or jurisdiction specified. In cross-border or multi-city Indian contracts, this creates ambiguity.",
     check: (r) =>
       !r.jurisdiction && !r.clauses.some((c) => /jurisdiction|governing law/i.test(c)),
   },
@@ -68,7 +68,7 @@ const BUILT_IN_POLICIES: Policy[] = [
     category: "payment",
     risk_level: "medium",
     explanation:
-      "No payment terms clause found. Without defined payment schedules and penalties, late or non-payment may go unaddressed.",
+      "No payment terms clause found. Without defined schedules and penalties, late or non-payment goes unaddressed. Under the MSME Act, 2006, payments beyond 45 days attract compound interest.",
     check: (r) =>
       !r.clauses.some((c) => /payment|invoice|fee/i.test(c)) && !r.structured_clauses.payment,
   },
@@ -88,7 +88,7 @@ const BUILT_IN_POLICIES: Policy[] = [
     category: "force_majeure",
     risk_level: "low",
     explanation:
-      "No force majeure clause found. Parties may have no protection against liability for events outside their control.",
+      "No force majeure clause found. Parties may have no protection against liability for events outside their control (floods, strikes, government orders).",
     check: (r) => !r.clauses.some((c) => /force majeure|act of god|unforeseeable/i.test(c)),
   },
 ];
@@ -117,15 +117,24 @@ export function mergeWithPolicyRisks(result: LLMResult): LLMResult {
   if (policyRisks.length === 0) return result;
 
   const allRisks = [...result.structured_risks, ...policyRisks];
+
+  // Never let policy risks lower the LLM's risk score — only boost it.
   const RISK_SCORE: Record<string, number> = { high: 80, medium: 50, low: 20 };
-  const newScore = Math.round(
-    allRisks.reduce((sum, r) => sum + (RISK_SCORE[r.level] ?? 50), 0) / allRisks.length,
-  );
+  const policyScore =
+    policyRisks.length > 0
+      ? Math.round(
+          policyRisks.reduce((sum, r) => sum + (RISK_SCORE[r.level] ?? 50), 0) /
+            policyRisks.length,
+        )
+      : 0;
+
+  // Blend: take max of original score and policy-derived score
+  const newScore = Math.max(result.risk_score, Math.round((result.risk_score + policyScore) / 2));
 
   return {
     ...result,
     structured_risks: allRisks,
     risks: allRisks.map((r) => `[${r.level}] ${r.reason}`),
-    risk_score: newScore,
+    risk_score: Math.min(newScore, 100),
   };
 }

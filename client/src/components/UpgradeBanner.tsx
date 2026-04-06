@@ -21,11 +21,11 @@ export function UpgradeBanner({ feature = "this feature" }: { feature?: string }
             Upgrade to Professional to access {feature}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Full analysis, AI-drafted revisions, and compliance checks.
+            100 contracts/month · full analysis · redlines · rewrites
           </p>
         </div>
         <Button size="sm" onClick={() => setLocation("/billing")} data-testid="upgrade-banner-btn">
-          Upgrade
+          Upgrade Plan
         </Button>
       </div>
     </motion.div>

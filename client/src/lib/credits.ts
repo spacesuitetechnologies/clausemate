@@ -2,7 +2,8 @@
  * Credit-Based Pricing System — Types, Constants, Utilities
  *
  * Central source of truth for the credit model.
- * All pricing UI, guards, and API calls reference this file.
+ * Credits are used internally for cost control.
+ * UI displays contracts_per_month instead of raw credits.
  */
 
 /* ── Plan Types ──────────────────────────────────── */
@@ -14,10 +15,13 @@ export interface Plan {
   name: string;
   monthly_price: number;
   credits: number;
+  /** Display-facing contract quota — shown in UI instead of raw credits */
+  contracts_per_month: number;
   overage_rate: number; // ₹ per extra credit
   features: string[];
   cta: string;
   popular: boolean;
+  badge?: string;
 }
 
 /* ── Usage Types ─────────────────────────────────── */
@@ -79,10 +83,11 @@ export const PLANS: Plan[] = [
     name: "Free",
     monthly_price: 0,
     credits: 10,
-    overage_rate: 0, // no overage allowed
+    contracts_per_month: 3,
+    overage_rate: 0,
     features: [
-      "1 contract (basic analysis only)",
-      "10 credits included",
+      "3 contracts / month",
+      "Basic analysis only",
       "No redlines or rewrites",
       "Email support",
     ],
@@ -94,15 +99,15 @@ export const PLANS: Plan[] = [
     name: "Starter",
     monthly_price: 999,
     credits: 100,
+    contracts_per_month: 20,
     overage_rate: 15,
     features: [
-      "100 credits per month",
-      "~10 contract analyses",
-      "Basic analysis + limited redlines",
+      "20 contracts / month",
+      "Basic analysis",
+      "Limited redlines",
       "Email support",
-      "₹15 per extra credit",
     ],
-    cta: "Choose Starter",
+    cta: "Get Started",
     popular: false,
   },
   {
@@ -110,32 +115,32 @@ export const PLANS: Plan[] = [
     name: "Professional",
     monthly_price: 2999,
     credits: 400,
+    contracts_per_month: 100,
     overage_rate: 12,
     features: [
-      "400 credits per month",
-      "~40 contract analyses",
+      "100 contracts / month",
       "Full analysis + redlines + rewrites",
+      "Priority processing",
       "Priority support",
-      "₹12 per extra credit",
     ],
-    cta: "Start Professional",
+    cta: "Upgrade Plan",
     popular: true,
+    badge: "Most Popular",
   },
   {
     id: "enterprise",
     name: "Enterprise",
     monthly_price: 9999,
     credits: 1500,
+    contracts_per_month: 500,
     overage_rate: 8,
     features: [
-      "1,500+ credits per month",
-      "~150 contract analyses",
-      "Full analysis + redlines + rewrites",
-      "Multi-user & team features",
-      "Dedicated account manager",
-      "₹8 per extra credit",
+      "500 contracts / month",
+      "Full features",
+      "Team usage",
+      "Priority support",
     ],
-    cta: "Contact Sales",
+    cta: "Upgrade Plan",
     popular: false,
   },
 ];
@@ -191,7 +196,7 @@ export function canAfford(
   estimatedCredits: number
 ): { allowed: boolean; reason?: string } {
   if (userPlan.plan_id === "free" && userPlan.credits_remaining <= 0) {
-    return { allowed: false, reason: "Free plan limit reached. Upgrade to continue." };
+    return { allowed: false, reason: "You've reached your contract limit. Upgrade to analyze more." };
   }
 
   // Paid plans allow overage
@@ -202,7 +207,7 @@ export function canAfford(
   if (userPlan.credits_remaining < estimatedCredits) {
     return {
       allowed: false,
-      reason: `Insufficient credits. Need ~${estimatedCredits}, have ${userPlan.credits_remaining}.`,
+      reason: "No contracts remaining this month. Upgrade or buy extra contracts.",
     };
   }
 
@@ -224,3 +229,20 @@ export function formatPrice(amount: number): string {
   if (amount === 0) return "₹0";
   return `₹${amount.toLocaleString("en-IN")}`;
 }
+
+/**
+ * Convert a credit count to an approximate contract count for display.
+ * Uses ANALYSIS_DEFAULT as the per-contract credit cost.
+ */
+export function creditsToContracts(credits: number): number {
+  return Math.floor(credits / CREDIT_COSTS.ANALYSIS_DEFAULT);
+}
+
+/**
+ * Pay-as-you-go top-up options displayed below the plan grid.
+ * Contracts → price mapping only; backend records these as credit additions.
+ */
+export const PAYG_OPTIONS = [
+  { contracts: 5,  price: 99,  label: "5 contracts" },
+  { contracts: 12, price: 199, label: "12 contracts" },
+] as const;

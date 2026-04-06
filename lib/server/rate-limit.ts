@@ -1,32 +1,49 @@
 /**
  * Rate limiting — uses Upstash Redis when configured, falls back to in-memory.
  *
- * Required env vars for Redis (optional):
+ * Presets:
+ *   "analyze"           — 1 request per 5s (default)
+ *   "generate-contract" — 1 request per 30s
+ *   "generate-clause"   — 1 request per 3s
+ *
+ * Optional env vars:
  *   UPSTASH_REDIS_REST_URL
  *   UPSTASH_REDIS_REST_TOKEN
  */
 
-// ── In-memory fallback ────────────────────────────────────────────────────────
+export type RateLimitPreset = "analyze" | "generate-contract" | "generate-clause";
+
+interface Window {
+  requests: number;
+  windowMs: number;
+}
+
+const WINDOWS: Record<RateLimitPreset, Window> = {
+  "analyze":           { requests: 1, windowMs: 5_000 },
+  "generate-contract": { requests: 1, windowMs: 30_000 },
+  "generate-clause":   { requests: 1, windowMs: 3_000 },
+};
+
+// ── In-memory fallback (resets on cold start) ─────────────────────────────────
 
 const inMemoryStore = new Map<string, number>();
-const IN_MEMORY_WINDOW_MS = 5_000;
 
-function inMemoryLimit(key: string): { allowed: boolean } {
+function inMemoryLimit(key: string, windowMs: number): { allowed: boolean } {
   const now = Date.now();
   const last = inMemoryStore.get(key) ?? 0;
-  if (now - last < IN_MEMORY_WINDOW_MS) return { allowed: false };
+  if (now - last < windowMs) return { allowed: false };
   inMemoryStore.set(key, now);
   return { allowed: true };
 }
 
-// ── Upstash Redis limiter (sliding window, 1 request per 5 s per user) ────────
+// ── Upstash Redis limiters (one per preset) ───────────────────────────────────
 
-let _ratelimit: {
-  limit: (key: string) => Promise<{ success: boolean }>;
-} | null = null;
+type RedisLimiter = { limit: (key: string) => Promise<{ success: boolean }> };
 
-async function getRedisLimiter() {
-  if (_ratelimit) return _ratelimit;
+const _limiters = new Map<RateLimitPreset, RedisLimiter>();
+
+async function getRedisLimiter(preset: RateLimitPreset): Promise<RedisLimiter | null> {
+  if (_limiters.has(preset)) return _limiters.get(preset)!;
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -37,25 +54,35 @@ async function getRedisLimiter() {
     const { Ratelimit } = await import("@upstash/ratelimit");
 
     const redis = new Redis({ url, token });
-    _ratelimit = new Ratelimit({
+    const { requests, windowMs } = WINDOWS[preset];
+    const windowSec = Math.round(windowMs / 1000);
+
+    const limiter = new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(1, "5 s"),
+      limiter: Ratelimit.slidingWindow(requests, `${windowSec} s`),
       analytics: false,
-    });
-    return _ratelimit;
+    }) as RedisLimiter;
+
+    _limiters.set(preset, limiter);
+    return limiter;
   } catch {
-    // Package not installed — fall back to in-memory
     return null;
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function checkRateLimit(userId: string): Promise<{ allowed: boolean }> {
-  const limiter = await getRedisLimiter();
+export async function checkRateLimit(
+  userId: string,
+  preset: RateLimitPreset = "analyze",
+): Promise<{ allowed: boolean }> {
+  const key = `${preset}:${userId}`;
+  const limiter = await getRedisLimiter(preset);
+
   if (limiter) {
-    const result = await limiter.limit(`analyze:${userId}`);
+    const result = await limiter.limit(key);
     return { allowed: result.success };
   }
-  return inMemoryLimit(`analyze:${userId}`);
+
+  return inMemoryLimit(key, WINDOWS[preset].windowMs);
 }

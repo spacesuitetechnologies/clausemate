@@ -408,8 +408,8 @@ function FeaturesSection() {
   );
 }
 
-/* ── Pricing (credit-based) ───────────────────────── */
-import { PLANS, formatPrice } from "@/lib/credits";
+/* ── Pricing ──────────────────────────────────────── */
+import { PLANS, PAYG_OPTIONS, formatPrice } from "@/lib/credits";
 
 function PricingSection({ onSelectPlan }: { onSelectPlan: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -417,27 +417,96 @@ function PricingSection({ onSelectPlan }: { onSelectPlan: () => void }) {
   return (
     <section id="pricing" className="py-16 sm:py-28 px-4 sm:px-6" ref={ref}>
       <div className="max-w-[1100px] mx-auto">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : {}} className="text-center mb-16">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : {}} className="text-center mb-4">
           <p className="text-xs uppercase tracking-[0.18em] text-primary font-medium mb-3">Pricing</p>
-          <h2 className="font-display text-2xl md:text-3xl mb-3">Credit-based pricing that scales with you</h2>
-          <p className="text-sm text-muted-foreground max-w-[440px] mx-auto">Pay for what you use. 1 contract analysis = 8–12 credits. Redlines and rewrites cost extra.</p>
+          <h2 className="font-display text-2xl md:text-3xl mb-3">Simple pricing. Powerful contracts.</h2>
+          <p className="text-sm text-muted-foreground max-w-[440px] mx-auto">
+            Know exactly how many contracts you can analyze each month. No hidden credits, no surprises.
+          </p>
         </motion.div>
+
+        {/* Trust indicator */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.15 }}
+          className="text-center text-[11px] text-muted-foreground mb-12"
+        >
+          Used by founders &amp; legal teams across India
+        </motion.p>
+
         <motion.div variants={stagger} initial="hidden" animate={isInView ? "show" : "hidden"} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {PLANS.map((plan) => (
             <motion.div key={plan.id} variants={fadeUp} transition={{ duration: 0.4 }}
-              className={`relative rounded-xl border p-6 bg-white flex flex-col ${plan.popular ? "border-primary shadow-md" : "border-border"}`}>
-              {plan.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2"><span className="text-[10px] uppercase tracking-wider font-semibold text-white bg-primary px-3 py-1 rounded-full">Recommended</span></div>}
+              className={`relative rounded-xl border p-6 bg-white flex flex-col ${
+                plan.popular
+                  ? "border-primary shadow-[0_4px_24px_rgba(59,130,246,0.18)]"
+                  : "border-border"
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-white bg-primary px-3 py-1 rounded-full whitespace-nowrap">
+                    {plan.badge ?? "Most Popular"}
+                  </span>
+                </div>
+              )}
               <h3 className="text-sm font-semibold mb-0.5">{plan.name}</h3>
-              <div className="flex items-baseline gap-1 mb-1 mt-3"><span className="font-display text-2xl">{formatPrice(plan.monthly_price)}</span>{plan.monthly_price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}</div>
-              <p className="text-[11px] text-primary font-medium mb-4">{plan.credits} credits/month</p>
+              <div className="flex items-baseline gap-1 mt-3 mb-0.5">
+                <span className="font-display text-2xl font-bold">{formatPrice(plan.monthly_price)}</span>
+                {plan.monthly_price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
+              </div>
+              <p className={`text-[13px] font-semibold mb-4 ${plan.popular ? "text-primary" : "text-foreground"}`}>
+                {plan.contracts_per_month} contracts/month
+              </p>
               <ul className="space-y-2 mb-6 flex-1">
-                {plan.features.map((f) => (<li key={f} className="flex items-start gap-2"><Check className="h-3.5 w-3.5 text-primary/70 shrink-0 mt-0.5" /><span className="text-[12px] text-muted-foreground leading-snug">{f}</span></li>))}
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2">
+                    <Check className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${plan.popular ? "text-primary" : "text-primary/60"}`} />
+                    <span className="text-[12px] text-muted-foreground leading-snug">{f}</span>
+                  </li>
+                ))}
               </ul>
-              <Button className="w-full mt-auto" variant={plan.popular ? "default" : "outline"} size="sm" onClick={onSelectPlan} data-testid={`pricing-${plan.id}-btn`}>
+              <Button
+                className="w-full mt-auto"
+                variant={plan.popular ? "default" : "outline"}
+                size="sm"
+                onClick={onSelectPlan}
+                data-testid={`pricing-${plan.id}-btn`}
+              >
                 {plan.cta} <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
             </motion.div>
           ))}
+        </motion.div>
+
+        {/* Pay-as-you-go */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 0.35 }}
+          className="mt-8 rounded-xl border border-border bg-white p-6"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+            <div className="shrink-0">
+              <p className="text-sm font-semibold">Need more? Buy extra contracts</p>
+              <p className="text-[12px] text-muted-foreground mt-0.5">One-time top-up — no subscription required.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {PAYG_OPTIONS.map((opt) => (
+                <button
+                  key={opt.contracts}
+                  onClick={onSelectPlan}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 hover:border-primary/40 hover:bg-primary/[0.02] transition-colors duration-150 text-left"
+                  data-testid={`payg-landing-${opt.contracts}-btn`}
+                >
+                  <span className="text-[13px] font-semibold">{opt.label}</span>
+                  <span className="text-[11px] text-muted-foreground">→</span>
+                  <span className="text-[13px] font-semibold text-primary">{formatPrice(opt.price)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </motion.div>
       </div>
     </section>

@@ -60,4 +60,15 @@ export interface AnalysisJob {
   contract_id: string;
   user_id: string;
   include_redlines: boolean;
+  /** Number of times this job has already been attempted (0-indexed). Used for logging. */
+  retry_count?: number;
+}
+
+/** Token usage and estimated cost from one LLM call */
+export interface LLMUsage {
+  provider: string;
+  input_tokens: number;
+  output_tokens: number;
+  /** Estimated USD cost based on published pricing */
+  cost_usd: number;
 }

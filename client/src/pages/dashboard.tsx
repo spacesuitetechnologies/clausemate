@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useLocation, Link } from "wouter";
-import { FileText, TrendingUp, Coins, Upload, ArrowRight, Clock } from "lucide-react";
+import { FileText, TrendingUp, Upload, ArrowRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/context/auth-context";
@@ -60,21 +60,21 @@ function DashboardContent() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
-          icon={Coins}
-          label="Credits Remaining"
-          value={credits.displayRemaining}
-          sub={`of ${credits.displayTotal} on ${credits.plan_name} plan`}
+          icon={FileText}
+          label="Contracts Remaining"
+          value={credits.contractsRemaining}
+          sub={`of ${credits.contractsTotal} on ${credits.plan_name} plan`}
           delay={0.05}
           iconColor="text-green-600"
           iconBg="bg-green-100"
         />
         <StatCard
           icon={TrendingUp}
-          label="Credits Used"
-          value={credits.displayUsed}
+          label="Contracts Used"
+          value={credits.contractsUsed}
           sub={
             credits.hasOverage
-              ? `${credits.overage_credits} overage (${credits.displayOverageCost})`
+              ? `Overage: ${credits.displayOverageCost}`
               : "This billing period"
           }
           delay={0.1}
@@ -82,21 +82,17 @@ function DashboardContent() {
           iconBg="bg-blue-100"
         />
         <StatCard
-          icon={FileText}
-          label="Est. Analyses Left"
-          value={
-            credits.credits_remaining > 0
-              ? `~${Math.floor(credits.credits_remaining / credits.CREDIT_COSTS.ANALYSIS_DEFAULT)}`
-              : "0"
-          }
-          sub={`at ${credits.CREDIT_COSTS.ANALYSIS_DEFAULT} credits each`}
+          icon={Upload}
+          label="Plan"
+          value={credits.plan_name}
+          sub={credits.contractsTotal + " contracts / month"}
           delay={0.15}
           iconColor="text-purple-600"
           iconBg="bg-purple-100"
         />
       </div>
 
-      {/* Credit usage bar */}
+      {/* Contract usage bar */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -104,26 +100,26 @@ function DashboardContent() {
         className="rounded-xl border border-border bg-white p-5"
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[12px] font-medium">Credit Usage</span>
-          <span className="text-[11px] text-muted-foreground">
-            {credits.displayUsed} / {credits.displayTotal}
+          <span className="text-[12px] font-medium">Contracts used this month</span>
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {credits.contractsUsed} / {credits.contractsTotal}
           </span>
         </div>
         <div className={`h-2 rounded-full bg-muted overflow-hidden transition-shadow duration-500 ${
-          credits.usagePercent > 80
+          credits.contractsPercent > 80
             ? "shadow-[0_0_8px_rgba(239,68,68,0.35)]"
-            : credits.usagePercent > 50
+            : credits.contractsPercent > 50
               ? "shadow-[0_0_8px_rgba(234,179,8,0.35)]"
               : "shadow-[0_0_8px_rgba(34,197,94,0.25)]"
         }`}>
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, credits.usagePercent)}%` }}
+            animate={{ width: `${Math.min(100, credits.contractsPercent)}%` }}
             transition={{ duration: 0.6 }}
             className={`h-full rounded-full transition-colors duration-500 ${
-              credits.usagePercent > 80
+              credits.contractsPercent > 80
                 ? "bg-red-500"
-                : credits.usagePercent > 50
+                : credits.contractsPercent > 50
                   ? "bg-yellow-500"
                   : "bg-green-500"
             }`}
@@ -131,7 +127,7 @@ function DashboardContent() {
         </div>
         {credits.isOverLimit && (
           <p className="text-[11px] text-red-500 mt-2">
-            Credit limit reached.{" "}
+            You've used all your contracts this month.{" "}
             <button
               onClick={() => setLocation("/billing")}
               className="text-primary underline"
@@ -154,7 +150,7 @@ function DashboardContent() {
           Upload a PDF or DOCX contract for review
         </p>
         <p className="text-[11px] text-primary mb-4">
-          Estimated cost: ~{credits.CREDIT_COSTS.ANALYSIS_DEFAULT} credits
+          Uses 1 contract from your monthly quota
         </p>
         <Button
           size="sm"

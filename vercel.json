@@ -16,7 +16,13 @@
     "api/contracts/[id]/analysis.ts": {
       "maxDuration": 10
     },
+    "api/contracts/index.ts": {
+      "maxDuration": 10
+    },
     "api/user/plan.ts": {
+      "maxDuration": 10
+    },
+    "api/user/usage.ts": {
       "maxDuration": 10
     },
     "api/generate-clause.ts": {
@@ -27,6 +33,15 @@
     },
     "api/parse-contract-intent.ts": {
       "maxDuration": 20
+    },
+    "api/billing/create-subscription.ts": {
+      "maxDuration": 15
+    },
+    "api/billing/verify.ts": {
+      "maxDuration": 10
+    },
+    "api/billing/webhook.ts": {
+      "maxDuration": 15
     }
   }
 }

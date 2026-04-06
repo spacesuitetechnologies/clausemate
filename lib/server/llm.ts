@@ -1,40 +1,46 @@
-import type { LLMResult, StructuredRisk, StructuredClauses } from "./types";
+import type { LLMResult, LLMUsage, StructuredRisk, StructuredClauses } from "./types";
+import { callLLM } from "./aiProvider";
 
 const RISK_LEVEL_SCORE: Record<string, number> = { high: 80, medium: 50, low: 20 };
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
 export function buildPrompt(contractText: string): string {
-  return `You are an expert contract risk analyst.
+  return `You are an expert Indian contract lawyer and risk analyst with deep knowledge of:
+- Indian Contract Act, 1872
+- Specific Relief Act, 1963
+- Arbitration and Conciliation Act, 1996
+- MSME Development Act, 2006 (payment protection)
+- Information Technology Act, 2000 (for digital/IP clauses)
 
-Analyze the contract and return ONLY valid JSON — no markdown, no explanation, no text outside the JSON.
+Analyze the contract below and return ONLY valid JSON — no markdown fences, no explanation, no text outside the JSON.
 
 Required JSON format:
 {
-  "parties": ["Party 1 name", "Party 2 name"],
-  "effective_date": "YYYY-MM-DD or descriptive date string, or null if not found",
-  "jurisdiction": "Governing law / jurisdiction string, or null if not found",
-  "summary": "2-3 lines in simple English: what this contract is, who it binds, and its biggest concern",
+  "parties": ["Party 1 full name", "Party 2 full name"],
+  "effective_date": "YYYY-MM-DD or descriptive date string, or null",
+  "jurisdiction": "Governing law / jurisdiction string, or null",
+  "summary": "2-3 lines in plain English: what this contract is, who it binds, its biggest risk, and key concern for the weaker party",
   "risks": [
     {
       "level": "high",
-      "clause": "Name of the clause (e.g. Indemnification)",
-      "issue": "What is wrong or one-sided",
-      "impact": "Real-world consequence (e.g. You may owe unlimited damages)",
-      "reason": "Why this is a risk"
+      "clause": "Exact clause name from the contract",
+      "issue": "What is wrong or one-sided in plain language",
+      "impact": "Real-world consequence with specifics (e.g. 'You could owe unlimited damages')",
+      "reason": "Why this is a legal or financial risk under Indian law"
     }
   ],
   "missing_clauses": [
     {
-      "clause": "Clause name (e.g. Limitation of Liability)",
-      "importance": "Why this clause is standard",
-      "risk": "What could go wrong without it"
+      "clause": "Clause name",
+      "importance": "Why this clause is standard in Indian contracts of this type",
+      "risk": "What could go wrong without it under Indian law"
     }
   ],
   "suggestions": [
     {
       "clause": "Clause name",
-      "fix": "Specific change to negotiate or add"
+      "fix": "Specific negotiation change or addition — be concrete and actionable"
     }
   ],
   "clauses": ["Termination", "Payment", "Liability"],
@@ -42,83 +48,33 @@ Required JSON format:
 }
 
 Rules:
-- Be specific, not generic — reference actual clause language where possible
-- Mention money or legal consequences clearly in impact fields
-- risks: list 2-6 genuine risks; level must be exactly "low", "medium", or "high"
-- missing_clauses: list 1-4 clauses absent from the contract that a party should insist on
-- suggestions: list 1-4 concrete negotiation fixes
-- clauses: list all major clause types present in the contract
-- risk_score: 0-100 integer (0=no risk, 100=extremely dangerous)
-- Keep all values concise
+- Be specific: reference actual clause language from the contract
+- Flag Indian-specific issues: 45-day MSME payment rule, one-sided arbitrator appointment, perpetual IP assignments, unreasonable non-competes (India courts routinely void >12 month, national scope)
+- risks: 2-8 genuine risks; level must be exactly "low", "medium", or "high"
+- missing_clauses: 1-5 clauses absent that parties in India should insist on
+- suggestions: 1-5 concrete negotiation points
+- clauses: all major clause types present in the contract
+- risk_score: 0-100 integer (0=safe, 100=extremely dangerous)
+- Keep values concise but specific
 
 CONTRACT:
 ${contractText}`;
 }
 
-// ── API calls ─────────────────────────────────────────────────────────────────
-
-async function callAnthropic(text: string): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
-      messages: [{ role: "user", content: buildPrompt(text) }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Anthropic error ${response.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await response.json() as { content: Array<{ type: string; text: string }> };
-  return data.content?.[0]?.text ?? "";
-}
-
-async function callOpenAI(text: string): Promise<string> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY not set");
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 2048,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content: buildPrompt(text) }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`OpenAI error ${response.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-  return data.choices?.[0]?.message?.content ?? "";
-}
-
 // ── Response parser ───────────────────────────────────────────────────────────
 
 export function parseLLMResponse(raw: string): LLMResult {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/im, "")
+    .replace(/```\s*$/m, "")
+    .trim();
+
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("LLM returned no JSON object");
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = JSON.parse(jsonMatch[0]);
   } catch {
     throw new Error("LLM returned invalid JSON");
   }
@@ -132,7 +88,7 @@ export function parseLLMResponse(raw: string): LLMResult {
             const validLevel = (["low", "medium", "high"].includes(level)
               ? level
               : "medium") as StructuredRisk["level"];
-            const reason = String(obj.reason ?? obj.issue ?? "");
+            const reason = String(obj.reason ?? obj.issue ?? "").trim();
             if (!reason) return [];
             return [
               {
@@ -144,7 +100,9 @@ export function parseLLMResponse(raw: string): LLMResult {
               },
             ];
           }
-          if (typeof r === "string") return [{ level: "medium" as const, reason: r }];
+          if (typeof r === "string" && r.trim()) {
+            return [{ level: "medium" as const, reason: r.trim() }];
+          }
           return [];
         })
         .filter((r) => r.reason)
@@ -178,24 +136,25 @@ export function parseLLMResponse(raw: string): LLMResult {
 
   const risks: string[] = structuredRisks.map((r) => `[${r.level}] ${r.reason}`);
 
-  const clauses: string[] = Array.isArray(parsed.clauses)
-    ? (parsed.clauses as unknown[]).map(String).filter(Boolean)
-    : Object.entries(structuredClauses)
-        .filter(([, v]) => v !== null)
-        .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
+  const clauses: string[] =
+    clauseNames.length > 0
+      ? clauseNames
+      : Object.entries(structuredClauses)
+          .filter(([, v]) => v !== null)
+          .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1));
 
   const modelScore = typeof parsed.risk_score === "number" ? parsed.risk_score : null;
+  const computedScore =
+    structuredRisks.length > 0
+      ? Math.round(
+          structuredRisks.reduce((sum, r) => sum + (RISK_LEVEL_SCORE[r.level] ?? 50), 0) /
+            structuredRisks.length,
+        )
+      : 50;
   const risk_score =
     modelScore !== null && modelScore >= 0 && modelScore <= 100
       ? Math.round(modelScore)
-      : structuredRisks.length > 0
-        ? Math.round(
-            structuredRisks.reduce(
-              (sum, r) => sum + (RISK_LEVEL_SCORE[r.level] ?? 50),
-              0,
-            ) / structuredRisks.length,
-          )
-        : 50;
+      : computedScore;
 
   const missing_clauses = Array.isArray(parsed.missing_clauses)
     ? (parsed.missing_clauses as unknown[]).flatMap((m) => {
@@ -244,23 +203,15 @@ export function parseLLMResponse(raw: string): LLMResult {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function analyzeWithLLM(contractText: string): Promise<LLMResult> {
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      return parseLLMResponse(await callAnthropic(contractText));
-    } catch (err) {
-      console.error(
-        "[llm] Anthropic failed, falling back to OpenAI:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
+export interface LLMAnalysisResult {
+  result: LLMResult;
+  usage: LLMUsage;
+}
 
-  if (process.env.OPENAI_API_KEY) {
-    return parseLLMResponse(await callOpenAI(contractText));
-  }
-
-  throw new Error(
-    "No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.",
-  );
+export async function analyzeWithLLM(contractText: string): Promise<LLMAnalysisResult> {
+  const { text, provider, usage } = await callLLM(buildPrompt(contractText), {
+    maxTokens: 2048,
+    jsonMode: true,
+  });
+  return { result: parseLLMResponse(text), usage: { ...usage, provider } };
 }

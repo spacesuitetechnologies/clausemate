@@ -224,11 +224,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 razorpay_subscription_id: response.razorpay_subscription_id,
                 razorpay_signature: response.razorpay_signature,
               });
-              // Webhook will allocate credits asynchronously.
-              // Refresh plan after a short delay to pick up the activated state.
-              setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
-              }, 3000);
+              // Webhook allocates credits asynchronously.
+              // Poll until the plan updates (max 30s, every 2s).
+              let attempts = 0;
+              const MAX_ATTEMPTS = 15;
+              const pollForPlanUpdate = async () => {
+                attempts += 1;
+                await queryClient.invalidateQueries({ queryKey: ["user", "plan"] });
+                const updated = queryClient.getQueryData<import("@/lib/credits").UserPlan>(["user", "plan"]);
+                if (updated && updated.plan_id !== "free") {
+                  return; // Plan updated — done
+                }
+                if (attempts < MAX_ATTEMPTS) {
+                  setTimeout(pollForPlanUpdate, 2000);
+                }
+              };
+              setTimeout(pollForPlanUpdate, 2000);
               resolve();
             } catch (err) {
               reject(err);

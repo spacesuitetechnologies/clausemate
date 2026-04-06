@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "wouter";
-import { LayoutDashboard, Upload, FileText, CreditCard, Settings, LogOut, Menu, X, Coins, FileSignature } from "lucide-react";
+import { LayoutDashboard, Upload, FileText, CreditCard, Settings, LogOut, Menu, X, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/context/auth-context";
@@ -86,8 +86,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Coins className="h-3 w-3" />
-              <span>{credits.displayRemaining} / {credits.displayTotal} credits</span>
+              <span>{credits.contractsRemaining} / {credits.contractsTotal} contracts left</span>
             </div>
           </div>
           <Button variant="ghost" size="sm" className="w-full justify-start text-[13px] text-muted-foreground" onClick={() => { logout(); setLocation("/"); }} data-testid="logout-btn">
@@ -101,8 +100,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <button className="lg:hidden h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent" onClick={() => setSidebarOpen(true)} data-testid="mobile-menu-btn"><Menu className="h-4 w-4" /></button>
           <div className="flex-1" />
           <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground hidden sm:flex">
-            <Coins className="h-3.5 w-3.5" />
-            <span>{credits.displayRemaining} credits</span>
+            <span>{credits.contractsRemaining} contracts left</span>
           </div>
           <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">{user?.name?.charAt(0) || "A"}</div>
         </header>

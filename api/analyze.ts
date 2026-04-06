@@ -1,44 +1,51 @@
 /**
  * POST /api/analyze
  *
- * Creates an analysis job, enqueues it via Upstash QStash (if configured),
- * or runs it inline as a synchronous fallback. Always returns immediately
- * with { analysis_id }.
+ * Creates an analysis job and enqueues it via Upstash QStash for guaranteed,
+ * durable delivery. Always returns { analysis_id } immediately.
+ *
+ * In local/dev environments without QSTASH_TOKEN the job runs inline so
+ * developers get a working experience without a queue.
  *
  * Required env vars:
  *   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
  *   ANTHROPIC_API_KEY (or OPENAI_API_KEY)
+ *   QSTASH_TOKEN       — Upstash QStash publish token (required in production)
  *
- * Optional env vars (for async processing):
- *   QSTASH_TOKEN           — Upstash QStash publish token
- *   QSTASH_WORKER_URL      — Override worker URL (defaults to VERCEL_URL + /api/worker/analyze)
- *
- * Optional env vars (for persistent rate limiting):
- *   UPSTASH_REDIS_REST_URL
- *   UPSTASH_REDIS_REST_TOKEN
+ * Optional env vars:
+ *   QSTASH_WORKER_URL  — Override worker URL (defaults to VERCEL_URL + /api/worker/analyze)
+ *   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN — persistent rate limiting
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getUserIdFromToken, getServiceClient } from "../lib/server/supabase";
 import { checkRateLimit } from "../lib/server/rate-limit";
 import { processAnalysis } from "../lib/server/process-analysis";
+import { log, warn, err as logErr } from "../lib/server/logger";
+import type { AnalysisJob } from "../lib/server/types";
 
 const ESTIMATED_CREDITS = 10;
+// QStash will retry the worker this many times on non-2xx before giving up.
+const QSTASH_RETRIES = 3;
 
 function estimatedBreakdown() {
   return [{ action: "analysis", label: "Contract analysis", credits: ESTIMATED_CREDITS }];
 }
 
-async function enqueueViaQStash(
-  payload: Record<string, unknown>,
-  workerUrl: string,
-): Promise<void> {
-  const token = process.env.QSTASH_TOKEN;
-  if (!token) throw new Error("QSTASH_TOKEN not set");
+function resolveWorkerUrl(): string | null {
+  if (process.env.QSTASH_WORKER_URL) return process.env.QSTASH_WORKER_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/worker/analyze`;
+  return null;
+}
 
+async function enqueueViaQStash(job: AnalysisJob, workerUrl: string): Promise<void> {
   const { Client } = await import("@upstash/qstash");
-  const client = new Client({ token });
-  await client.publishJSON({ url: workerUrl, body: payload });
+  const client = new Client({ token: process.env.QSTASH_TOKEN! });
+  await client.publishJSON({
+    url: workerUrl,
+    body: job as unknown as Record<string, unknown>,
+    retries: QSTASH_RETRIES,
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -47,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json({ error: "Method Not Allowed" });
     }
 
-    // ── Auth ────────────────────────────────────────────────────────────────
+    // ── Auth ──────────────────────────────────────────────────────────────────
     const authHeader = (req.headers?.authorization as string) ?? "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) return res.status(401).json({ error: "Missing authorization token" });
@@ -59,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
 
-    // ── Rate limit ──────────────────────────────────────────────────────────
+    // ── Rate limit ────────────────────────────────────────────────────────────
     const { allowed } = await checkRateLimit(userId);
     if (!allowed) {
       return res
@@ -67,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: "Too many requests. Please wait before analyzing again." });
     }
 
-    // ── Input validation ────────────────────────────────────────────────────
+    // ── Input validation ──────────────────────────────────────────────────────
     const body = (req.body ?? {}) as Record<string, unknown>;
     const contract_id = body.contract_id;
     const include_redlines = body.include_redlines === true;
@@ -76,11 +83,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "contract_id is required and must be a string" });
     }
 
-    // ── Verify contract ownership ───────────────────────────────────────────
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(contract_id)) {
+      return res.status(400).json({ error: "contract_id must be a valid UUID" });
+    }
+
+    // ── Verify contract ownership + validate file ─────────────────────────────
     const db = getServiceClient();
     const { data: contract, error: contractErr } = await db
       .from("contracts")
-      .select("id, filename")
+      .select("id, filename, file_size")
       .eq("id", contract_id)
       .eq("user_id", userId)
       .single();
@@ -89,7 +101,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "Contract not found" });
     }
 
-    // ── Create analysis record (status: queued) ─────────────────────────────
+    const MAX_FILE_BYTES = 10 * 1024 * 1024;
+    const fileSize = (contract.file_size as number | null) ?? 0;
+    if (fileSize > MAX_FILE_BYTES) {
+      return res.status(413).json({
+        error: `File too large (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 10 MB.`,
+      });
+    }
+
+    const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "jpg", "jpeg", "png"]);
+    const ext = String(contract.filename ?? "").split(".").pop()?.toLowerCase() ?? "";
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return res.status(422).json({
+        error: `Unsupported file type ".${ext}". Allowed: PDF, DOCX, TXT, JPG, PNG.`,
+      });
+    }
+
+    // ── Create analysis record ────────────────────────────────────────────────
     const { data: analysisRow, error: insertErr } = await db
       .from("analyses")
       .insert({
@@ -104,45 +132,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (insertErr || !analysisRow) {
-      console.error("[analyze] Insert failed:", insertErr?.message);
+      logErr("analyze", "Analysis record insert failed", { error: insertErr?.message });
       return res.status(500).json({ error: "Could not create analysis record. Please try again." });
     }
 
     const analysis_id = analysisRow.id as string;
 
-    // Mark contract as queued
     await db
       .from("contracts")
       .update({ latest_analysis_id: analysis_id, latest_analysis_status: "queued" })
       .eq("id", contract_id);
 
-    const job = { analysis_id, contract_id, user_id: userId, include_redlines };
+    const job: AnalysisJob = { analysis_id, contract_id, user_id: userId, include_redlines };
 
-    // ── Enqueue or run inline ────────────────────────────────────────────────
-    const qstashToken = process.env.QSTASH_TOKEN;
+    // ── Enqueue via QStash (production) or run inline (dev) ───────────────────
+    if (process.env.QSTASH_TOKEN) {
+      const workerUrl = resolveWorkerUrl();
 
-    if (qstashToken) {
-      // Async: let QStash call the worker
-      const baseUrl =
-        process.env.QSTASH_WORKER_URL ??
-        (process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}/api/worker/analyze`
-          : null);
+      if (!workerUrl) {
+        // QStash token present but no URL — misconfigured; fail loudly
+        logErr("analyze", "QSTASH_TOKEN is set but worker URL cannot be resolved. Set QSTASH_WORKER_URL or VERCEL_URL.", { analysis_id });
+        await Promise.all([
+          db.from("analyses").update({ status: "failed", error: "Queue configuration error." }).eq("id", analysis_id),
+          db.from("contracts").update({ latest_analysis_status: "failed" }).eq("id", contract_id),
+        ]);
+        return res.status(500).json({ error: "Queue configuration error. Please contact support." });
+      }
 
-      if (baseUrl) {
-        try {
-          await enqueueViaQStash(job, baseUrl);
-        } catch (qErr) {
-          console.error("[analyze] QStash publish failed, running inline:", qErr);
-          // Fall through to inline processing below
-          await processAnalysis(job);
-        }
-      } else {
-        console.warn("[analyze] QSTASH_TOKEN set but no worker URL — running inline");
-        await processAnalysis(job);
+      try {
+        await enqueueViaQStash(job, workerUrl);
+        log("analyze", "Job enqueued", { analysis_id, workerUrl });
+      } catch (qErr) {
+        const qErrMsg = qErr instanceof Error ? qErr.message : String(qErr);
+        logErr("analyze", "QStash enqueue failed", { analysis_id, error: qErrMsg });
+        await Promise.all([
+          db.from("analyses").update({ status: "failed", error: "Failed to queue analysis. Please try again." }).eq("id", analysis_id),
+          db.from("contracts").update({ latest_analysis_status: "failed" }).eq("id", contract_id),
+        ]);
+        return res.status(500).json({ error: "Failed to queue analysis. Please try again." });
       }
     } else {
-      // Sync fallback: run analysis in this request
+      // Dev / local mode only — run inline so devs don't need QStash configured
+      warn("analyze", "QSTASH_TOKEN not configured — running analysis inline (dev mode only, not for production)", { analysis_id });
       await processAnalysis(job);
     }
 
@@ -154,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       breakdown: estimatedBreakdown(),
     });
   } catch (err: unknown) {
-    console.error("[analyze] FATAL:", err);
+    logErr("analyze", "FATAL unhandled error", { error: err instanceof Error ? err.message : String(err) });
     return res.status(500).json({ error: "An unexpected error occurred. Please try again." });
   }
 }
