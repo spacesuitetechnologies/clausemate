@@ -18,10 +18,8 @@
  * Required env vars:
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *   ANTHROPIC_API_KEY (or OPENAI_API_KEY)
- *
- * Optional env vars:
- *   QSTASH_CURRENT_SIGNING_KEY  — QStash signature verification
- *   QSTASH_NEXT_SIGNING_KEY     — QStash signature verification
+ *   QSTASH_CURRENT_SIGNING_KEY  — QStash signature verification (required)
+ *   QSTASH_NEXT_SIGNING_KEY     — QStash signature verification (required)
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -34,11 +32,19 @@ async function verifyQStashSignature(req: VercelRequest): Promise<boolean> {
   const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
   const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY;
 
-  // No signing keys configured — skip verification (local dev / self-hosted)
-  if (!currentKey || !nextKey) return true;
+  // Signing keys are required in all environments.
+  // In local dev, api/analyze.ts runs processAnalysis() inline (no QSTASH_TOKEN),
+  // so this endpoint is never legitimately called without QStash.
+  if (!currentKey || !nextKey) {
+    logErr("worker", "QStash signing keys not configured — rejecting request. Set QSTASH_CURRENT_SIGNING_KEY and QSTASH_NEXT_SIGNING_KEY in environment variables.");
+    return false;
+  }
 
   const signature = req.headers["upstash-signature"] as string | undefined;
-  if (!signature) return false;
+  if (!signature) {
+    logErr("worker", "Missing upstash-signature header — rejecting request.");
+    return false;
+  }
 
   try {
     const { Receiver } = await import("@upstash/qstash");

@@ -411,103 +411,187 @@ function FeaturesSection() {
 /* ── Pricing ──────────────────────────────────────── */
 import { PLANS, PAYG_OPTIONS, formatPrice } from "@/lib/credits";
 
+const LAWYER_COST = 2000;
+
 function PricingSection({ onSelectPlan }: { onSelectPlan: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: "-60px" });
   return (
     <section id="pricing" className="py-16 sm:py-28 px-4 sm:px-6" ref={ref}>
-      <div className="max-w-[1100px] mx-auto">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : {}} className="text-center mb-4">
+      <div className="max-w-[1120px] mx-auto">
+
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={isInView ? { opacity: 1, y: 0 } : {}} className="text-center mb-3">
           <p className="text-xs uppercase tracking-[0.18em] text-primary font-medium mb-3">Pricing</p>
-          <h2 className="font-display text-2xl md:text-3xl mb-3">Simple pricing. Powerful contracts.</h2>
-          <p className="text-sm text-muted-foreground max-w-[440px] mx-auto">
-            Know exactly how many contracts you can analyze each month. No hidden credits, no surprises.
+          <h2 className="font-display text-2xl md:text-[2rem] mb-3 leading-tight">
+            Institutional-grade contract review.<br className="hidden sm:block" />
+            Starting at ₹30 per contract.
+          </h2>
+          <p className="text-sm text-muted-foreground max-w-[420px] mx-auto leading-relaxed">
+            Lawyer review costs ₹2,000+ per contract.
+            clausemate.ai gives you the same protection for a fraction of the price.
           </p>
         </motion.div>
 
-        {/* Trust indicator */}
-        <motion.p
+        {/* Trust strip */}
+        <motion.div
           initial={{ opacity: 0 }}
           animate={isInView ? { opacity: 1 } : {}}
-          transition={{ delay: 0.15 }}
-          className="text-center text-[11px] text-muted-foreground mb-12"
+          transition={{ delay: 0.12 }}
+          className="flex items-center justify-center gap-5 mb-14 flex-wrap"
         >
-          Used by founders &amp; legal teams across India
-        </motion.p>
-
-        <motion.div variants={stagger} initial="hidden" animate={isInView ? "show" : "hidden"} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {PLANS.map((plan) => (
-            <motion.div key={plan.id} variants={fadeUp} transition={{ duration: 0.4 }}
-              className={`relative rounded-xl border p-6 bg-white flex flex-col ${
-                plan.popular
-                  ? "border-primary shadow-[0_4px_24px_rgba(59,130,246,0.18)]"
-                  : "border-border"
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-white bg-primary px-3 py-1 rounded-full whitespace-nowrap">
-                    {plan.badge ?? "Most Popular"}
-                  </span>
-                </div>
-              )}
-              <h3 className="text-sm font-semibold mb-0.5">{plan.name}</h3>
-              <div className="flex items-baseline gap-1 mt-3 mb-0.5">
-                <span className="font-display text-2xl font-bold">{formatPrice(plan.monthly_price)}</span>
-                {plan.monthly_price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
-              </div>
-              <p className={`text-[13px] font-semibold mb-4 ${plan.popular ? "text-primary" : "text-foreground"}`}>
-                {plan.contracts_per_month} contracts/month
-              </p>
-              <ul className="space-y-2 mb-6 flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2">
-                    <Check className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${plan.popular ? "text-primary" : "text-primary/60"}`} />
-                    <span className="text-[12px] text-muted-foreground leading-snug">{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button
-                className="w-full mt-auto"
-                variant={plan.popular ? "default" : "outline"}
-                size="sm"
-                onClick={onSelectPlan}
-                data-testid={`pricing-${plan.id}-btn`}
-              >
-                {plan.cta} <ChevronRight className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </motion.div>
+          {[
+            "Used by founders & legal teams across India",
+            "Secure & confidential",
+            "Cancel anytime",
+          ].map((t, i) => (
+            <span key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="h-1 w-1 rounded-full bg-muted-foreground/40 shrink-0" />
+              {t}
+            </span>
           ))}
+        </motion.div>
+
+        {/* Plan grid */}
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          animate={isInView ? "show" : "hidden"}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start"
+        >
+          {PLANS.map((plan) => {
+            const saving = plan.price_per_contract > 0 ? LAWYER_COST - plan.price_per_contract : null;
+            return (
+              <motion.div
+                key={plan.id}
+                variants={fadeUp}
+                transition={{ duration: 0.4 }}
+                className={`relative flex flex-col transition-all duration-300 ${
+                  plan.popular
+                    ? "rounded-2xl p-px bg-gradient-to-b from-primary/60 via-primary/25 to-primary/8 shadow-[0_8px_40px_rgba(59,130,246,0.2)] hover:shadow-[0_14px_52px_rgba(59,130,246,0.28)] hover:-translate-y-1"
+                    : "rounded-2xl border border-border bg-white hover:-translate-y-0.5 hover:shadow-lg"
+                }`}
+              >
+                <div className={`flex flex-col flex-1 rounded-2xl p-6 ${plan.popular ? "bg-white" : ""}`}>
+                  {plan.popular && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-white bg-primary px-3.5 py-1 rounded-full shadow whitespace-nowrap">
+                        {plan.badge}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Name + tagline */}
+                  <div className="mb-4">
+                    <h3 className="text-[13px] font-bold">{plan.name}</h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{plan.tagline}</p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mb-1">
+                    <div className="flex items-baseline gap-1">
+                      <span className="font-display text-3xl font-bold tracking-tight">{formatPrice(plan.monthly_price)}</span>
+                      {plan.monthly_price > 0 && <span className="text-[12px] text-muted-foreground">/mo</span>}
+                    </div>
+                    {plan.price_per_contract > 0 ? (
+                      <p className={`text-[12px] font-semibold mt-0.5 ${plan.popular ? "text-primary" : "text-foreground/70"}`}>
+                        ≈ {formatPrice(plan.price_per_contract)} per contract
+                      </p>
+                    ) : (
+                      <p className="text-[12px] text-muted-foreground mt-0.5">Free forever</p>
+                    )}
+                  </div>
+
+                  {/* Savings badge */}
+                  {saving && saving > 0 && (
+                    <div className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 mb-4 w-fit ${
+                      plan.popular
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-muted text-muted-foreground"
+                    }`}>
+                      Save {formatPrice(saving)} vs lawyer
+                    </div>
+                  )}
+
+                  {/* Contract quota */}
+                  <div className={`rounded-xl px-3 py-2.5 mb-5 ${plan.popular ? "bg-primary/5 border border-primary/10" : "bg-muted/50"}`}>
+                    <p className={`text-[13px] font-bold ${plan.popular ? "text-primary" : "text-foreground"}`}>
+                      {plan.contracts_per_month} contracts/month
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{plan.analysis_depth}</p>
+                  </div>
+
+                  {/* Features */}
+                  <ul className="space-y-2.5 mb-7 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2">
+                        <Check className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${plan.popular ? "text-primary" : "text-primary/50"}`} />
+                        <span className="text-[12px] text-muted-foreground leading-snug">{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button
+                    className={`w-full mt-auto h-9 font-semibold ${plan.popular ? "shadow-sm shadow-primary/20" : ""}`}
+                    variant={plan.popular ? "default" : "outline"}
+                    size="sm"
+                    onClick={onSelectPlan}
+                    data-testid={`pricing-${plan.id}-btn`}
+                  >
+                    {plan.cta}
+                    <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </motion.div>
+            );
+          })}
         </motion.div>
 
         {/* Pay-as-you-go */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ delay: 0.35 }}
-          className="mt-8 rounded-xl border border-border bg-white p-6"
+          transition={{ delay: 0.38 }}
+          className="mt-8 rounded-2xl border border-border bg-white p-6 shadow-sm"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-10">
             <div className="shrink-0">
-              <p className="text-sm font-semibold">Need more? Buy extra contracts</p>
-              <p className="text-[12px] text-muted-foreground mt-0.5">One-time top-up — no subscription required.</p>
+              <p className="text-sm font-semibold">Need just a few? Pay per contract</p>
+              <p className="text-[12px] text-muted-foreground mt-0.5">
+                One-time top-up · No subscription · Instant access
+              </p>
             </div>
             <div className="flex flex-wrap gap-3">
               {PAYG_OPTIONS.map((opt) => (
                 <button
                   key={opt.contracts}
                   onClick={onSelectPlan}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 hover:border-primary/40 hover:bg-primary/[0.02] transition-colors duration-150 text-left"
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-3 hover:border-primary/35 hover:bg-primary/[0.02] hover:shadow-sm transition-all duration-200 text-left"
                   data-testid={`payg-landing-${opt.contracts}-btn`}
                 >
-                  <span className="text-[13px] font-semibold">{opt.label}</span>
-                  <span className="text-[11px] text-muted-foreground">→</span>
-                  <span className="text-[13px] font-semibold text-primary">{formatPrice(opt.price)}</span>
+                  <div>
+                    <p className="text-[13px] font-semibold">{opt.label}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      ≈ {formatPrice(Math.round(opt.price / opt.contracts))}/contract
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground group-hover:text-primary transition-colors">→</span>
+                  <span className="text-[14px] font-bold text-primary">{formatPrice(opt.price)}</span>
                 </button>
               ))}
             </div>
           </div>
         </motion.div>
+
+        {/* Bottom trust */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.45 }}
+          className="text-center text-[11px] text-muted-foreground mt-8"
+        >
+          All plans include secure document handling · Payments powered by Razorpay · No contracts lock-in
+        </motion.p>
       </div>
     </section>
   );

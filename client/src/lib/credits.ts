@@ -17,7 +17,13 @@ export interface Plan {
   credits: number;
   /** Display-facing contract quota — shown in UI instead of raw credits */
   contracts_per_month: number;
+  /** ₹ per contract equivalent shown in UI for value framing */
+  price_per_contract: number;
   overage_rate: number; // ₹ per extra credit
+  /** One-line positioning tagline */
+  tagline: string;
+  /** Short depth-of-analysis description */
+  analysis_depth: string;
   features: string[];
   cta: string;
   popular: boolean;
@@ -84,14 +90,17 @@ export const PLANS: Plan[] = [
     monthly_price: 0,
     credits: 10,
     contracts_per_month: 3,
+    price_per_contract: 0,
     overage_rate: 0,
+    tagline: "Try before you commit",
+    analysis_depth: "Basic risk flags only",
     features: [
       "3 contracts / month",
-      "Basic analysis only",
+      "Basic risk flags only",
       "No redlines or rewrites",
       "Email support",
     ],
-    cta: "Get Started",
+    cta: "Get Started Free",
     popular: false,
   },
   {
@@ -100,14 +109,17 @@ export const PLANS: Plan[] = [
     monthly_price: 999,
     credits: 100,
     contracts_per_month: 20,
+    price_per_contract: 50,
     overage_rate: 15,
+    tagline: "Perfect for occasional reviews",
+    analysis_depth: "Limited clause insights",
     features: [
       "20 contracts / month",
-      "Basic analysis",
-      "Limited redlines",
+      "Limited clause insights",
+      "Basic analysis + limited redlines",
       "Email support",
     ],
-    cta: "Get Started",
+    cta: "Start Analyzing",
     popular: false,
   },
   {
@@ -116,14 +128,17 @@ export const PLANS: Plan[] = [
     monthly_price: 2999,
     credits: 400,
     contracts_per_month: 100,
+    price_per_contract: 30,
     overage_rate: 12,
+    tagline: "Best for founders & startups",
+    analysis_depth: "Full legal-grade analysis + redlines",
     features: [
       "100 contracts / month",
-      "Full analysis + redlines + rewrites",
-      "Priority processing",
-      "Priority support",
+      "Full legal-grade analysis + redlines",
+      "AI-drafted clause rewrites",
+      "Priority processing & support",
     ],
-    cta: "Upgrade Plan",
+    cta: "Get Full Protection",
     popular: true,
     badge: "Most Popular",
   },
@@ -133,14 +148,17 @@ export const PLANS: Plan[] = [
     monthly_price: 9999,
     credits: 1500,
     contracts_per_month: 500,
+    price_per_contract: 20,
     overage_rate: 8,
+    tagline: "For scaling legal teams",
+    analysis_depth: "Team workflows + bulk processing",
     features: [
       "500 contracts / month",
-      "Full features",
-      "Team usage",
-      "Priority support",
+      "Team workflows + bulk processing",
+      "Full features + API access",
+      "Dedicated account manager",
     ],
-    cta: "Upgrade Plan",
+    cta: "Scale Your Team",
     popular: false,
   },
 ];
