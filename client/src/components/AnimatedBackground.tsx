@@ -1,17 +1,26 @@
 /**
- * AnimatedBackground
+ * AnimatedBackground — wave-style hero background
  *
- * Full-bleed animated hero background — sky blue / black palette.
- * GPU-only animations (transform + opacity). No JS timers.
+ * Design: flowing sky-blue energy waves over deep navy-black.
+ * Layer anatomy (back → front):
+ *   1. Solid base (#02080f)
+ *   2. Wave 1 — wide primary sky-blue ellipse, slow horizontal drift (26s)
+ *   3. Wave 2 — wider cyan ellipse, counter-phase drift (34s)
+ *   4. Wave 3 — diagonal energy band, faster (19s)
+ *   5. Glow core — static radial highlight at top-center (light source)
+ *   6. Glow pulse — centered breathing radial (6s opacity cycle)
+ *   7. Sweep ray — single diagonal light ray, full width traverse (22s)
+ *   8. Dot grid — 44px subtle texture (static)
+ *   9. Bottom fade — linear gradient to keep lower edge dark
+ *
+ * All animations use only transform + opacity (GPU compositor layer).
+ * No layout or paint triggered on any frame.
  *
  * Usage:
- *   <section className="relative min-h-screen">
+ *   <section className="relative overflow-hidden">
  *     <AnimatedBackground />
  *     <div className="relative z-10">…content…</div>
  *   </section>
- *
- * The parent must have `position: relative` (or absolute/fixed).
- * Content must have `position: relative` + a z-index above 0.
  */
 export function AnimatedBackground() {
   return (
@@ -20,138 +29,136 @@ export function AnimatedBackground() {
       className="absolute inset-0 overflow-hidden pointer-events-none select-none"
       style={{ zIndex: 0 }}
     >
-      {/* ── Base fill — very dark navy-black ──────────────────────────── */}
-      <div className="absolute inset-0" style={{ background: "#030d1a" }} />
+      {/* ── 1. Base — very dark navy-black ─────────────────────────────── */}
+      <div className="absolute inset-0" style={{ background: "#02080f" }} />
 
-      {/* ── Layer 1: Primary sky-blue blob — top-left, drifts diagonally ── */}
+      {/* ── 2. Wave 1: primary sky-blue — wide flat ellipse, top band ───── */}
+      {/*    Moves left → right → left, slight Y wobble, scaleX breathe.   */}
+      {/*    This is the dominant color layer — opacity pushed high.        */}
       <div
-        className="ab-blob ab-blob-1 absolute rounded-full"
+        className="ab-wave ab-wave-1 absolute"
         style={{
-          width: "75vw",
-          height: "75vw",
-          maxWidth: 860,
-          maxHeight: 860,
-          top: "-18%",
-          left: "-12%",
+          width: "160vw",
+          height: "58vh",
+          top: "-8%",
+          left: "-30%",
+          borderRadius: "50%",
           background:
-            "radial-gradient(circle at 50% 50%, rgba(14,165,233,0.28) 0%, rgba(2,132,199,0.14) 38%, transparent 68%)",
-          filter: "blur(72px)",
+            "radial-gradient(ellipse at 50% 60%, rgba(14,165,233,0.50) 0%, rgba(2,132,199,0.26) 45%, transparent 72%)",
+          filter: "blur(52px)",
           willChange: "transform",
         }}
       />
 
-      {/* ── Layer 2: Cyan accent blob — bottom-right, counter-drift ───── */}
+      {/* ── 3. Wave 2: cyan — wider, lower, counter-phase ───────────────── */}
+      {/*    Drifts in opposite direction to wave 1. Where they overlap    */}
+      {/*    the combined glow brightens — this creates the wave rhythm.   */}
       <div
-        className="ab-blob ab-blob-2 absolute rounded-full"
+        className="ab-wave ab-wave-2 absolute"
         style={{
-          width: "62vw",
-          height: "62vw",
-          maxWidth: 720,
-          maxHeight: 720,
-          bottom: "-14%",
-          right: "-8%",
+          width: "180vw",
+          height: "72vh",
+          top: "22%",
+          left: "-40%",
+          borderRadius: "50%",
           background:
-            "radial-gradient(circle at 50% 50%, rgba(6,182,212,0.22) 0%, rgba(8,145,178,0.11) 42%, transparent 68%)",
-          filter: "blur(88px)",
+            "radial-gradient(ellipse at 50% 40%, rgba(6,182,212,0.26) 0%, rgba(8,145,178,0.14) 48%, transparent 72%)",
+          filter: "blur(80px)",
           willChange: "transform",
         }}
       />
 
-      {/* ── Layer 3: Mid-tone sky blob — center, vertical float ────────── */}
+      {/* ── 4. Wave 3: diagonal energy band ────────────────────────────── */}
+      {/*    Lighter sky-blue, narrower, moves diagonally. Acts as the    */}
+      {/*    "crest" shimmer visible between the two main wave troughs.   */}
       <div
-        className="ab-blob ab-blob-3 absolute rounded-full"
+        className="ab-wave ab-wave-3 absolute"
         style={{
-          width: "48vw",
-          height: "48vw",
-          maxWidth: 580,
-          maxHeight: 580,
-          top: "28%",
-          left: "32%",
+          width: "120vw",
+          height: "42vh",
+          top: "46%",
+          left: "-10%",
+          borderRadius: "50%",
           background:
-            "radial-gradient(circle at 50% 50%, rgba(56,189,248,0.13) 0%, rgba(14,116,144,0.07) 50%, transparent 72%)",
-          filter: "blur(100px)",
+            "radial-gradient(ellipse at 50% 50%, rgba(56,189,248,0.20) 0%, rgba(14,165,233,0.10) 50%, transparent 72%)",
+          filter: "blur(60px)",
           willChange: "transform",
         }}
       />
 
-      {/* ── Static glow: soft radial — top-center (premium highlight) ─── */}
+      {/* ── 5. Glow core — static radial, top-center ─────────────────────  */}
+      {/*    Fixed "light source" — gives the scene a sense of origin.     */}
+      {/*    Not animated, so it always anchors the scene.                 */}
       <div
         className="absolute"
         style={{
-          width: "55vw",
-          height: "45vh",
+          width: "60vw",
+          height: "50vh",
           top: 0,
           left: "50%",
           transform: "translateX(-50%)",
           background:
-            "radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.14) 0%, transparent 65%)",
-          filter: "blur(48px)",
+            "radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.22) 0%, rgba(14,165,233,0.10) 50%, transparent 72%)",
+          filter: "blur(40px)",
         }}
       />
 
-      {/* ── Static glow: deep blue — bottom-left corner ──────────────── */}
+      {/* ── 6. Glow pulse — breathing central highlight ───────────────── */}
+      {/*    Slowly swells and recedes in opacity. Creates the impression  */}
+      {/*    that light is flowing through the scene rhythmically.         */}
       <div
-        className="absolute"
+        className="ab-glow-pulse absolute"
         style={{
-          width: "40vw",
-          height: "38vh",
-          bottom: 0,
-          left: 0,
+          width: "80vw",
+          height: "60vh",
+          top: "5%",
+          left: "50%",
+          transform: "translateX(-50%)",
           background:
-            "radial-gradient(ellipse at 0% 100%, rgba(2,132,199,0.16) 0%, transparent 60%)",
-          filter: "blur(56px)",
+            "radial-gradient(ellipse at 50% 30%, rgba(14,165,233,0.18) 0%, rgba(2,132,199,0.08) 55%, transparent 78%)",
+          filter: "blur(64px)",
+          willChange: "opacity, transform",
         }}
       />
 
-      {/* ── Light streak 1: diagonal, slow sweep ──────────────────────── */}
+      {/* ── 7. Sweep ray — diagonal light streak, full-width traverse ───── */}
+      {/*    A single thin light ray that crosses the hero every 22s.      */}
+      {/*    Fades in from left, fades out at right — never visible at     */}
+      {/*    rest so there is no "reset flash".                            */}
       <div
-        className="ab-streak ab-streak-1 absolute"
+        className="ab-sweep absolute"
         style={{
-          width: "130%",
-          height: "1px",
-          top: "34%",
-          left: "-15%",
+          width: "200%",
+          height: "2px",
+          top: "38%",
+          left: "-50%",
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(125,211,252,0.10) 20%, rgba(56,189,248,0.30) 50%, rgba(125,211,252,0.10) 80%, transparent 100%)",
-          filter: "blur(2px)",
-          transform: "rotate(-11deg)",
+            "linear-gradient(90deg, transparent 0%, rgba(125,211,252,0.08) 15%, rgba(56,189,248,0.40) 50%, rgba(125,211,252,0.08) 85%, transparent 100%)",
+          filter: "blur(3px)",
           willChange: "transform, opacity",
         }}
       />
 
-      {/* ── Light streak 2: shallower angle, delayed ─────────────────── */}
-      <div
-        className="ab-streak ab-streak-2 absolute"
-        style={{
-          width: "110%",
-          height: "1px",
-          top: "62%",
-          left: "-5%",
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.08) 25%, rgba(34,211,238,0.22) 50%, rgba(6,182,212,0.08) 75%, transparent 100%)",
-          filter: "blur(1.5px)",
-          transform: "rotate(-6deg)",
-          willChange: "transform, opacity",
-        }}
-      />
-
-      {/* ── Dot grid texture — depth & premium grid feel ──────────────── */}
+      {/* ── 8. Dot grid — 44px grid, sky-tinted dots ────────────────────── */}
+      {/*    Very low opacity. Adds the premium "structured depth" found   */}
+      {/*    in Stripe / Linear hero sections.                             */}
       <div
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(circle, rgba(125,211,252,0.55) 1px, transparent 1px)",
+            "radial-gradient(circle, rgba(125,211,252,0.60) 1px, transparent 1px)",
           backgroundSize: "44px 44px",
-          opacity: 0.028,
+          opacity: 0.032,
         }}
       />
 
-      {/* ── Edge vignette — keeps content readable ────────────────────── */}
+      {/* ── 9. Bottom fade — darkens lower hero so text sits on dark bg ─── */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-x-0 bottom-0"
         style={{
+          height: "35%",
           background:
-            "radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(3,13,26,0.55) 100%)",
+            "linear-gradient(to bottom, transparent 0%, rgba(2,8,15,0.70) 100%)",
         }}
       />
     </div>

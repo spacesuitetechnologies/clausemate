@@ -342,71 +342,79 @@
   .btn-gradient-primary { animation: none; }
 }
 
-/* ─── AnimatedBackground ─────────────────────────────────────────────────────
-   All animations use only transform + opacity — composited on the GPU.
-   No layout or paint triggered.
-   Three blob timings are intentionally co-prime (22s, 28s, 18s) so they
-   never land in exactly the same position, keeping the motion organic.
+/* ─── AnimatedBackground — wave edition ──────────────────────────────────────
+   All animations are transform + opacity only — GPU compositor thread.
+   No layout recalc or paint on any frame.
+
+   Timing strategy: co-prime durations (26s / 34s / 19s / 6s / 22s) mean
+   the layers never align, keeping motion perpetually organic.
+
+   Wave physics model:
+     Wave 1 (26s) moves LEFT→RIGHT.
+     Wave 2 (34s) moves RIGHT→LEFT — counter-phase.
+     When they overlap their combined opacity brightens (constructive
+     interference). When they separate the scene dims (destructive
+     interference). This produces the wave-energy rhythm without JS.
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Blob 1 — large primary sky-blue orb, diagonal drift top-left → bottom-right */
-@keyframes abBlobDrift1 {
-  0%   { transform: translate(0%,    0%)    scale(1);    }
-  20%  { transform: translate(7%,   -8%)    scale(1.07); }
-  45%  { transform: translate(4%,    5%)    scale(0.96); }
-  70%  { transform: translate(-5%,   9%)    scale(1.04); }
-  100% { transform: translate(0%,    0%)    scale(1);    }
+/* ── Wave 1: primary sky-blue, dominant horizontal motion ── */
+/*   Large translateX swing ± 9%, tiny Y wobble, subtle scaleX breath.   */
+@keyframes abWave1 {
+  0%   { transform: translateX(-9%)  translateY( 0%)   scaleX(1.00); }
+  20%  { transform: translateX(-2%)  translateY(-2%)   scaleX(1.04); }
+  45%  { transform: translateX( 8%)  translateY( 1%)   scaleX(0.97); }
+  70%  { transform: translateX( 3%)  translateY(-3%)   scaleX(1.03); }
+  100% { transform: translateX(-9%)  translateY( 0%)   scaleX(1.00); }
 }
 
-/* Blob 2 — cyan accent orb, counter-drifts bottom-right → top-left */
-@keyframes abBlobDrift2 {
-  0%   { transform: translate(0%,    0%)    scale(1);    }
-  30%  { transform: translate(-9%,   8%)    scale(1.06); }
-  60%  { transform: translate(-4%,  -7%)    scale(0.94); }
-  100% { transform: translate(0%,    0%)    scale(1);    }
+/* ── Wave 2: cyan, counter-phase — drifts opposite to wave 1 ── */
+@keyframes abWave2 {
+  0%   { transform: translateX( 7%)  translateY(-1%)   scaleX(1.00); }
+  25%  { transform: translateX( 1%)  translateY( 3%)   scaleX(1.05); }
+  55%  { transform: translateX(-8%)  translateY(-2%)   scaleX(0.96); }
+  80%  { transform: translateX(-3%)  translateY( 2%)   scaleX(1.02); }
+  100% { transform: translateX( 7%)  translateY(-1%)   scaleX(1.00); }
 }
 
-/* Blob 3 — mid-tone fill orb, slow vertical float */
-@keyframes abBlobDrift3 {
-  0%   { transform: translate(0%,    0%)    scale(1);    }
-  35%  { transform: translate(-7%,  -10%)   scale(1.08); }
-  65%  { transform: translate(6%,    7%)    scale(0.95); }
-  100% { transform: translate(0%,    0%)    scale(1);    }
+/* ── Wave 3: diagonal energy crest, faster rhythm ── */
+/*   Small rotate added so the ellipse tilts — simulates a wave crest.   */
+@keyframes abWave3 {
+  0%   { transform: translateX(-5%)  translateY( 5%)   rotate( 0.0deg); }
+  35%  { transform: translateX( 7%)  translateY(-3%)   rotate( 1.2deg); }
+  65%  { transform: translateX( 2%)  translateY( 3%)   rotate(-0.6deg); }
+  100% { transform: translateX(-5%)  translateY( 5%)   rotate( 0.0deg); }
 }
 
-/* Streak 1 — diagonal light ray, slow drift + opacity pulse */
-@keyframes abStreakSweep1 {
-  0%   { transform: rotate(-11deg) translateX(-4%); opacity: 0;   }
-  12%  { opacity: 1; }
-  50%  { transform: rotate(-11deg) translateX(6%);  opacity: 0.9; }
-  88%  { opacity: 1; }
-  100% { transform: rotate(-11deg) translateX(-4%); opacity: 0;   }
+/* ── Glow pulse: breathing light source at top-center ── */
+/*   Only animates opacity + a very small scale — keeps it subtle.       */
+@keyframes abGlowPulse {
+  0%, 100% { opacity: 0.50; transform: translateX(-50%) scale(1.00); }
+  50%       { opacity: 0.95; transform: translateX(-50%) scale(1.07); }
 }
 
-/* Streak 2 — shallower ray, opposite drift, delayed */
-@keyframes abStreakSweep2 {
-  0%   { transform: rotate(-6deg) translateX(4%);  opacity: 0;   }
-  15%  { opacity: 1; }
-  50%  { transform: rotate(-6deg) translateX(-5%); opacity: 0.8; }
-  85%  { opacity: 1; }
-  100% { transform: rotate(-6deg) translateX(4%);  opacity: 0;   }
+/* ── Sweep ray: single light ray crossing hero left → right ── */
+/*   Starts and ends fully transparent — no visible reset flash.         */
+@keyframes abSweep {
+  0%   { transform: rotate(-9deg) translateX(-130%); opacity: 0;   }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: rotate(-9deg) translateX( 130%); opacity: 0;   }
 }
 
 /* ── Class assignments ── */
-.ab-blob-1 { animation: abBlobDrift1 22s ease-in-out infinite; }
-.ab-blob-2 { animation: abBlobDrift2 28s ease-in-out infinite; }
-.ab-blob-3 { animation: abBlobDrift3 18s ease-in-out infinite; }
-
-.ab-streak-1 { animation: abStreakSweep1 14s ease-in-out infinite; }
-.ab-streak-2 { animation: abStreakSweep2 20s ease-in-out 5s infinite; }
+.ab-wave-1     { animation: abWave1      26s ease-in-out          infinite; }
+.ab-wave-2     { animation: abWave2      34s ease-in-out          infinite; }
+.ab-wave-3     { animation: abWave3      19s ease-in-out          infinite; }
+.ab-glow-pulse { animation: abGlowPulse   6s ease-in-out          infinite; }
+.ab-sweep      { animation: abSweep      22s ease-in-out 4s       infinite; }
 
 /* Respect user motion preferences */
 @media (prefers-reduced-motion: reduce) {
-  .ab-blob-1,
-  .ab-blob-2,
-  .ab-blob-3,
-  .ab-streak-1,
-  .ab-streak-2 {
+  .ab-wave-1,
+  .ab-wave-2,
+  .ab-wave-3,
+  .ab-glow-pulse,
+  .ab-sweep {
     animation: none !important;
   }
 }
