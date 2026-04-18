@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Logo } from "@/components/Logo";
 import { RiskBar } from "@/components/RiskBar";
+import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { demoContractText, mockClauses, demoSteps } from "@/lib/mock-data";
 import { useAuth } from "@/context/auth-context";
 
@@ -31,11 +31,6 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#05070a]/90 backdrop-blur-md border-b border-white/[0.07]">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-14">
         <Link href="/dashboard" className="flex items-center gap-1.5 transition-all duration-200 hover:opacity-90">
-          <img
-            src="/clausemate/mainlogo.png"
-            alt="Clausemate"
-            className="h-7 w-auto object-contain"
-          />
           <span className="flex items-center text-[15px] font-semibold text-white tracking-tight">
             clausemate<span className="text-sky-400">.ai</span>
           </span>
@@ -65,11 +60,9 @@ function Navbar({ onLogin }: { onLogin: () => void }) {
 /* ── Hero ── */
 function HeroSection({ onTryFree }: { onTryFree: () => void }) {
   return (
-    <section
-      className="min-h-screen flex items-center justify-center text-white"
-      style={{ background: "linear-gradient(135deg, #0b2a4a 0%, #123e63 40%, #2f6f8f 100%)" }}
-    >
-      <div className="flex flex-col items-center justify-center text-center max-w-3xl mx-auto px-6 py-28">
+    <section className="relative min-h-screen flex items-center justify-center text-white overflow-hidden">
+      <AnimatedBackground />
+      <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-3xl mx-auto px-6 py-28">
 
         {/* Badge */}
         <p className="text-xs tracking-[0.25em] text-white/60 uppercase mb-6">
@@ -646,7 +639,7 @@ function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm px-4" onClick={onClose}>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.25 }} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-xl border border-border bg-white p-8 shadow-xl">
             <div className="flex items-center justify-between mb-7">
-              <div className="flex items-center"><Logo size={26} /></div>
+              <span className="text-[15px] font-semibold tracking-tight text-foreground">clausemate<span className="text-primary">.ai</span></span>
               <button onClick={onClose} className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent transition-colors" data-testid="close-login-modal"><X className="h-3.5 w-3.5" /></button>
             </div>
 

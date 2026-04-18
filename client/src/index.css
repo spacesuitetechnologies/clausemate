@@ -342,6 +342,75 @@
   .btn-gradient-primary { animation: none; }
 }
 
+/* ─── AnimatedBackground ─────────────────────────────────────────────────────
+   All animations use only transform + opacity — composited on the GPU.
+   No layout or paint triggered.
+   Three blob timings are intentionally co-prime (22s, 28s, 18s) so they
+   never land in exactly the same position, keeping the motion organic.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* Blob 1 — large primary sky-blue orb, diagonal drift top-left → bottom-right */
+@keyframes abBlobDrift1 {
+  0%   { transform: translate(0%,    0%)    scale(1);    }
+  20%  { transform: translate(7%,   -8%)    scale(1.07); }
+  45%  { transform: translate(4%,    5%)    scale(0.96); }
+  70%  { transform: translate(-5%,   9%)    scale(1.04); }
+  100% { transform: translate(0%,    0%)    scale(1);    }
+}
+
+/* Blob 2 — cyan accent orb, counter-drifts bottom-right → top-left */
+@keyframes abBlobDrift2 {
+  0%   { transform: translate(0%,    0%)    scale(1);    }
+  30%  { transform: translate(-9%,   8%)    scale(1.06); }
+  60%  { transform: translate(-4%,  -7%)    scale(0.94); }
+  100% { transform: translate(0%,    0%)    scale(1);    }
+}
+
+/* Blob 3 — mid-tone fill orb, slow vertical float */
+@keyframes abBlobDrift3 {
+  0%   { transform: translate(0%,    0%)    scale(1);    }
+  35%  { transform: translate(-7%,  -10%)   scale(1.08); }
+  65%  { transform: translate(6%,    7%)    scale(0.95); }
+  100% { transform: translate(0%,    0%)    scale(1);    }
+}
+
+/* Streak 1 — diagonal light ray, slow drift + opacity pulse */
+@keyframes abStreakSweep1 {
+  0%   { transform: rotate(-11deg) translateX(-4%); opacity: 0;   }
+  12%  { opacity: 1; }
+  50%  { transform: rotate(-11deg) translateX(6%);  opacity: 0.9; }
+  88%  { opacity: 1; }
+  100% { transform: rotate(-11deg) translateX(-4%); opacity: 0;   }
+}
+
+/* Streak 2 — shallower ray, opposite drift, delayed */
+@keyframes abStreakSweep2 {
+  0%   { transform: rotate(-6deg) translateX(4%);  opacity: 0;   }
+  15%  { opacity: 1; }
+  50%  { transform: rotate(-6deg) translateX(-5%); opacity: 0.8; }
+  85%  { opacity: 1; }
+  100% { transform: rotate(-6deg) translateX(4%);  opacity: 0;   }
+}
+
+/* ── Class assignments ── */
+.ab-blob-1 { animation: abBlobDrift1 22s ease-in-out infinite; }
+.ab-blob-2 { animation: abBlobDrift2 28s ease-in-out infinite; }
+.ab-blob-3 { animation: abBlobDrift3 18s ease-in-out infinite; }
+
+.ab-streak-1 { animation: abStreakSweep1 14s ease-in-out infinite; }
+.ab-streak-2 { animation: abStreakSweep2 20s ease-in-out 5s infinite; }
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .ab-blob-1,
+  .ab-blob-2,
+  .ab-blob-3,
+  .ab-streak-1,
+  .ab-streak-2 {
+    animation: none !important;
+  }
+}
+
 /* ─── Elevation system ─── */
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button { @apply hidden; }

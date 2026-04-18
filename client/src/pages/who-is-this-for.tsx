@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import { useRef } from "react";
 import { useInView } from "framer-motion";
 import { Rocket, Building, Briefcase, Scale } from "lucide-react";
-import { Logo } from "@/components/Logo";
 import { Link } from "wouter";
 
 const fadeUp = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } };
@@ -60,7 +59,7 @@ function Navbar() {
     <nav className="border-b border-border/60 bg-white">
       <div className="max-w-[1140px] mx-auto flex items-center justify-between px-6 h-16">
         <Link href="/" className="flex items-center">
-          <Logo size={30} />
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">clausemate<span className="text-primary">.ai</span></span>
         </Link>
         <Link href="/">
           <span className="text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">

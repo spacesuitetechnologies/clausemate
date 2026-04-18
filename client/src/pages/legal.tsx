@@ -1,4 +1,3 @@
-import { Logo } from "@/components/Logo";
 import { Link, useRoute } from "wouter";
 
 function LegalNav() {
@@ -6,7 +5,7 @@ function LegalNav() {
     <nav className="border-b border-border/60 bg-white">
       <div className="max-w-[760px] mx-auto flex items-center justify-between px-6 h-16">
         <Link href="/" className="flex items-center">
-          <Logo size={28} />
+          <span className="text-[15px] font-semibold tracking-tight text-foreground">clausemate<span className="text-primary">.ai</span></span>
         </Link>
         <Link href="/"><span className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer">Back to Home</span></Link>
       </div>

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "wouter";
 import { LayoutDashboard, Upload, FileText, CreditCard, Settings, LogOut, Menu, X, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/Logo";
 import { useAuth } from "@/context/auth-context";
 import { useCredits } from "@/hooks/use-credits";
 
@@ -36,11 +35,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <aside className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-[232px] border-r border-border/60 bg-white flex flex-col transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="flex items-center justify-between px-5 h-14 border-b border-border/40">
           <Link href="/dashboard" className="flex items-center gap-2 transition-all hover:scale-[1.02]">
-            <img
-              src="/clausemate/mainlogo.png"
-              alt="Clausemate"
-              className="h-7 w-auto object-contain"
-            />
             <span className="font-semibold text-[13.5px] text-foreground tracking-tight">
               clausemate<span className="text-primary">.ai</span>
             </span>
